@@ -126,20 +126,60 @@ class MyCamuClient:
         return []
 
     def get_active_pass(self) -> dict:
+        """
+        Determines if student is currently clocked outside campus or has an active leave scheduled for today.
+        Leaves in the past (completed) are ignored.
+        """
         leaves = self.get_leaves()
+        today = datetime.now().date()
+
         for l in leaves:
             status = l.get("Stus", "")
-            if status in ["Submitted", "Approved", "In Progress", "In-Progress"]:
+            if status in ["Rejected", "Cancelled"]:
+                continue
+
+            start_str = l.get("start", "")[:10]
+            end_str = l.get("end", "")[:10]
+
+            try:
+                start_dt = datetime.strptime(start_str, "%Y-%m-%d").date() if start_str else None
+                end_dt = datetime.strptime(end_str, "%Y-%m-%d").date() if end_str else None
+            except Exception:
+                start_dt = end_dt = None
+
+            actual_out = l.get("actualOutTime")
+            actual_in = l.get("actualInTime")
+
+            # 1. Physical gate check: scanned OUT and NOT scanned back IN
+            if actual_out and not actual_in:
                 return {
                     "has_active_pass": True,
+                    "is_outside_campus": True,
                     "pass": l,
                     "reason": l.get("Rson"),
                     "type": l.get("LvTy"),
                     "status": status,
-                    "start": l.get("start"),
-                    "end": l.get("end")
+                    "start": start_str,
+                    "end": end_str,
+                    "message": "Student is physically checked OUT of campus through the security gate."
                 }
-        return {"has_active_pass": False, "pass": None}
+
+            # 2. Check if a leave is active TODAY
+            if start_dt and end_dt and start_dt <= today <= end_dt:
+                if status in ["Approved", "In Progress", "In-Progress", "Submitted"]:
+                    return {
+                        "has_active_pass": True,
+                        "is_outside_campus": False,
+                        "pass": l,
+                        "reason": l.get("Rson"),
+                        "type": l.get("LvTy"),
+                        "status": status,
+                        "start": start_str,
+                        "end": end_str,
+                        "message": f"Active {l.get('LvTy')} is currently active for today."
+                    }
+
+        return {"has_active_pass": False, "is_outside_campus": False, "pass": None}
 
     def get_attendance(self) -> dict:
         """
@@ -203,14 +243,13 @@ class MyCamuClient:
             return {"success": False, "message": "Authentication failed. Please verify credentials."}
 
         active = self.get_active_pass()
-        if active["has_active_pass"] and not ignore_active_warning:
+        if active["has_active_pass"] and active.get("is_outside_campus") and not ignore_active_warning:
             return {
                 "success": False,
                 "is_blocked_by_active_pass": True,
                 "message": (
-                    f"⚠️ Active leave already in progress: "
-                    f"'{active.get('type')}' ({active.get('reason')}) [Status: {active.get('status')}].\n\n"
-                    f"MyCamu will only allow a new Day Out Pass once you return to campus and check back in at the main gate."
+                    f"⚠️ You are currently recorded as checked OUT of campus at the security gate.\n\n"
+                    f"Please check back in at the campus gate before applying for a new pass."
                 ),
                 "active_pass": active["pass"]
             }
@@ -219,6 +258,7 @@ class MyCamuClient:
         date_str = now.strftime("%d-%b-%Y")
         time_str = now.strftime("%H:%M")
 
+        # Crucial fix: omit PtAb unless half-day leave to prevent SESSION_NOT_DEFINE
         payload = {
             "PerTy": "Student",
             "PerId": self.stu_id,
@@ -228,7 +268,6 @@ class MyCamuClient:
             "Rson": reason,
             "FrDt": date_str,
             "ToDt": date_str,
-            "PtAb": date_str,
             "periods": [],
             "Attachments": []
         }
@@ -240,11 +279,26 @@ class MyCamuClient:
                 output = res_json.get("output", {}).get("data", {})
                 errors = res_json.get("output", {}).get("errors")
 
+                if output and isinstance(output, dict):
+                    code = output.get("code")
+                    if code == "DAY_IS_HOLIDAY":
+                        return {
+                            "success": False,
+                            "message": "⚠️ Bennett ERP Notice: Today is listed as a Holiday on the academic calendar. Day Out Passes cannot be applied on official campus holidays."
+                        }
+                    elif code == "LEAVE_CANNOT_BE_APPLIED_ATTENDANCE_PRESENT":
+                        return {
+                            "success": False,
+                            "message": "⚠️ Attendance is already marked as Present for today. Day Out Pass cannot be applied."
+                        }
+                    elif code == "SUSPEND_STUDENT":
+                        return {
+                            "success": False,
+                            "message": "⚠️ Student status prevents applying for leave/outpass."
+                        }
+
                 if errors and isinstance(errors, dict) and errors.get("message"):
                     return {"success": False, "message": f"MyCamu Error: {errors.get('message')}"}
-
-                if isinstance(output, dict) and output.get("code"):
-                    return {"success": False, "message": f"MyCamu Error: {output.get('code')}"}
 
                 return {
                     "success": True,

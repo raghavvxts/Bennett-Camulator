@@ -1,6 +1,6 @@
 import os
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -47,7 +47,7 @@ def get_meal_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
         [
             InlineKeyboardButton("🍳 Breakfast", callback_data="meal_breakfast"),
-            InlineKeyboardButton("🍛 Lunch", callback_data="meal_lunch")
+            InlineKeyboardButton("🍱 Lunch", callback_data="meal_lunch")
         ],
         [
             InlineKeyboardButton("☕ High Tea", callback_data="meal_snacks"),
@@ -64,7 +64,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_data:
         welcome_text = (
             "👋 *Welcome to Bennett Camulator Bot!*\n\n"
-            "Generate *instant Day Out Passes*, check live *Mess Menu*, and track your *Attendance* with ease.\n\n"
+            "Generate *instant Day Out Passes*, check live *Mess Menu* (12-hour IST), and track your *Attendance*.\n\n"
             "🔒 *First-Time Setup:*\n"
             "Tap below to link your Bennett Parent Account."
         )
@@ -77,19 +77,115 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     student_name = user_data.get("student_name", "Student")
     msg = (
         f"👋 *Welcome back, {student_name}!* 🎓\n\n"
-        f"Parent: `{user_data.get('email')}`\n\n"
-        "Choose an option below:"
+        "Choose an option below or tap the `/` button:"
     )
     await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=get_main_keyboard())
+
+async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Restarts conversation state and returns to main menu."""
+    context.user_data.clear()
+    await start_command(update, context)
+
+async def features_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    features_text = (
+        "✨ *Bennett Camulator Features*\n\n"
+        "🚀 *Instant Day Out Pass*: Bypasses manual forms and auto-creates outpass.\n"
+        "🔍 *Gate & Overlap Status*: Real-time security gate verification.\n"
+        "🍱 *Live Mess Menu*: Automatically serves active meal in 12-hour IST format.\n"
+        "📊 *Live Attendance & Bunk Calculator*: Enrolled courses, bunks remaining, and targets.\n"
+        "📋 *Recent Passes*: View past leave history and approval status.\n"
+        "🚪 *Multi-User Support*: Switch or log into any student account safely.\n\n"
+        "Type `/start` or `/restart` anytime!"
+    )
+    await update.message.reply_text(features_text, parse_mode="Markdown")
+
+async def pass_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user_data = database.get_user(user_id)
+    if not user_data:
+        await update.message.reply_text("⚠️ Please link your parent account first using `/start`.", parse_mode="Markdown")
+        return
+    client = MyCamuClient(
+        email=user_data["email"],
+        password=user_data["password"],
+        cookies=user_data["cookies"],
+        stu_id=user_data["stu_id"],
+        in_id=user_data["in_id"],
+        student_name=user_data["student_name"]
+    )
+    status_msg = await update.message.reply_text("⏳ *Requesting Day Out Pass from Bennett MyCamu...*", parse_mode="Markdown")
+    res = client.create_day_pass(reason="Day Out")
+    if res.get("success"):
+        text = (
+            f"✅ *Day Out Pass Created!*\n\n"
+            f"👤 *Student:* {user_data['student_name']}\n"
+            f"📅 *Date:* {res.get('date')}\n"
+            f"⏰ *Generated:* {res.get('created_time')}\n"
+            f"⚡ *Approval:* Auto-Approved (Parent Session)\n\n"
+            f"Show your MyCamu QR / ID card at the security gate to exit."
+        )
+    else:
+        text = f"❌ *Pass Request Blocked:*\n\n{res.get('message')}"
+    await status_msg.edit_text(text, parse_mode="Markdown", reply_markup=get_main_keyboard())
+
+async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    meal = mess_menu.get_meal_info()
+    text = (
+        f"🍱 *Bennett Mess Menu — {meal['day']}*\n"
+        f"🕒 Current Time: `{meal['time']}`\n\n"
+        f"🍽️ *{meal['meal_label']}*\n"
+        f"━━━━━━━━━━━━━━━━━━━\n"
+        f"{meal['menu']}\n"
+        f"━━━━━━━━━━━━━━━━━━━\n\n"
+        "_Tap below to see other meals for today:_"
+    )
+    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=get_meal_keyboard())
+
+async def attendance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user_data = database.get_user(user_id)
+    if not user_data:
+        await update.message.reply_text("⚠️ Please link your parent account first using `/start`.", parse_mode="Markdown")
+        return
+    client = MyCamuClient(
+        email=user_data["email"],
+        password=user_data["password"],
+        cookies=user_data["cookies"],
+        stu_id=user_data["stu_id"],
+        in_id=user_data["in_id"],
+        student_name=user_data["student_name"]
+    )
+    status_msg = await update.message.reply_text("📊 *Fetching live attendance data...*", parse_mode="Markdown")
+    att = client.get_attendance()
+    if not att.get("success"):
+        await status_msg.edit_text(f"❌ Failed to fetch attendance: {att.get('message')}", reply_markup=get_main_keyboard())
+        return
+
+    overall = att["overall_pct"]
+    bar = "🟩" * (overall // 10) + "⬜" * (10 - (overall // 10))
+
+    text = (
+        f"📊 *Attendance Report — {user_data['student_name']}*\n\n"
+        f"📈 *Overall:* {overall}% {bar}\n"
+        f"🎯 *Classes Attended:* {att['overall_present']} / {att['overall_total']}\n"
+        f"🗓️ *This Month:* {att['month_pct']}%\n\n"
+        f"📚 *Subject Breakdown:*\n"
+    )
+    for s in att.get("subjects", []):
+        pct = s["percentage"]
+        icon = "🟢" if pct >= 75 else "🔴"
+        text += (
+            f"\n{icon} *{s['code']}* - {s['name']}\n"
+            f"   • Score: *{pct}%* ({s['present']}/{s['total']} classes)\n"
+            f"   • {s['advice']}\n"
+        )
+    await status_msg.edit_text(text, parse_mode="Markdown", reply_markup=get_main_keyboard())
 
 # --- Step-by-Step Login Handlers ---
 async def start_login_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if query:
         await query.answer()
-        chat_id = query.message.chat_id
-    else:
-        chat_id = update.effective_chat.id
 
     msg = (
         "📧 *Step 1 of 2: Parent Email*\n\n"
@@ -114,7 +210,7 @@ async def receive_email_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
         f"✅ Email saved: `{email}`\n\n"
         "🔑 *Step 2 of 2: Password*\n\n"
         "Now send your Password.\n\n"
-        "🔒 *(Your message will be deleted immediately from this chat for security)*"
+        "🔒 _(Your message will be deleted immediately from this chat for security)_"
     )
     await update.message.reply_text(msg, parse_mode="Markdown")
     return AWAITING_PASSWORD
@@ -122,26 +218,33 @@ async def receive_email_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def receive_password_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
     password = update.message.text.strip()
     chat_id = update.effective_chat.id
-    msg_id = update.message.message_id
+    message_id = update.message.message_id
 
-    # Immediately delete user message containing the password!
     try:
-        await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
-    except Exception:
-        pass
+        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except Exception as e:
+        logger.warning(f"Could not delete password message: {e}")
 
     email = context.user_data.get("login_email")
-    status_msg = await update.message.reply_text("🔄 *Authenticating with Bennett ERP (student.bennetterp.camu.in)...*", parse_mode="Markdown")
+    if not email:
+        await update.message.reply_text("❌ Session expired. Please send `/login` again.")
+        return ConversationHandler.END
 
-    ok, err, details = MyCamuClient.test_and_fetch_profile(email, password)
-    if not ok:
+    status_msg = await context.bot.send_message(
+        chat_id=chat_id,
+        text="⏳ *Authenticating with Bennett Parent Portal...*",
+        parse_mode="Markdown"
+    )
+
+    success, err_msg, details = MyCamuClient.test_and_fetch_profile(email, password)
+
+    if not success:
         await status_msg.edit_text(
-            f"❌ *Authentication Failed:*\n{err}\n\nType `/login` to try again.",
+            f"❌ *Authentication Failed:*\n{err_msg}\n\nType `/login` to try again.",
             parse_mode="Markdown"
         )
         return ConversationHandler.END
 
-    # Save to SQLite database
     user_id = update.effective_user.id
     database.save_user(
         telegram_id=user_id,
@@ -156,8 +259,7 @@ async def receive_password_step(update: Update, context: ContextTypes.DEFAULT_TY
     success_msg = (
         f"🎉 *Account Linked Successfully!*\n\n"
         f"👤 *Student:* {details['student_name']}\n"
-        f"🆔 *Student ID:* `{details['stu_id']}`\n"
-        f"📧 *Parent:* `{email}`\n\n"
+        f"🆔 *Student ID:* `{details['stu_id']}`\n\n"
         "Tap a button below to get started:"
     )
     await status_msg.edit_text(success_msg, parse_mode="Markdown", reply_markup=get_main_keyboard())
@@ -226,7 +328,7 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = (
             f"🍱 *Bennett Mess Menu — {meal['day']}*\n"
             f"🕒 Current Time: `{meal['time']}`\n\n"
-            f"🍴 *{meal['meal_label']}*\n"
+            f"🍽️ *{meal['meal_label']}*\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
             f"{meal['menu']}\n"
             f"━━━━━━━━━━━━━━━━━━━\n\n"
@@ -278,7 +380,7 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"*(You must check back in at the campus gate before applying for a new pass)*"
             )
         else:
-            text = "✅ *All Clear!*\n\nYou have no active leaves blocking you. You can generate an instant Day Out Pass whenever you are ready."
+            text = "✅ *All Clear!*\n\nYou are in campus with no active passes blocking you. You can generate an instant Day Out Pass whenever you are ready."
 
         await query.message.reply_text(text, parse_mode="Markdown", reply_markup=get_main_keyboard())
 
@@ -304,14 +406,26 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
+async def post_init(application):
+    """Configures the Telegram 3-slash (/) menu button with quick commands."""
+    commands = [
+        BotCommand("start", "Start the bot and open main menu"),
+        BotCommand("restart", "Restart the bot session and reset state"),
+        BotCommand("pass", "Request an instant Day Out Pass"),
+        BotCommand("menu", "View live Mess Menu (12-hour IST)"),
+        BotCommand("attendance", "View Attendance & bunk advice"),
+        BotCommand("features", "View full list of bot features")
+    ]
+    await application.bot.set_my_commands(commands)
+    logger.info("Bot commands menu registered successfully.")
+
 def main():
     if not BOT_TOKEN:
         print("❌ Error: TELEGRAM_BOT_TOKEN not set in .env")
         return
 
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
 
-    # Conversation handler for step-by-step login (Email first, then Password)
     login_conv = ConversationHandler(
         entry_points=[
             CommandHandler("login", start_login_step),
@@ -325,6 +439,11 @@ def main():
     )
 
     app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("restart", restart_command))
+    app.add_handler(CommandHandler("features", features_command))
+    app.add_handler(CommandHandler("pass", pass_command))
+    app.add_handler(CommandHandler("menu", menu_command))
+    app.add_handler(CommandHandler("attendance", attendance_command))
     app.add_handler(login_conv)
     app.add_handler(CallbackQueryHandler(handle_button))
 

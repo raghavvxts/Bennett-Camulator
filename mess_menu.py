@@ -1,48 +1,48 @@
 from datetime import datetime, time, timezone, timedelta
 
-# Bennett University Standard Hostel Mess Menu (7-Day Rotation)
+# Bennett University Hostel Mess Menu (7-Day Rotation)
 BENNETT_MESS_MENU = {
     "Monday": {
-        "breakfast": "Aloo Paratha, Curd, Pickle, Boiled Eggs / Omelette, Bread, Butter, Jam, Tea & Coffee",
-        "lunch": "Rajma Masala, Aloo Jeera, Steamed Rice, Roti, Boondi Raita, Salad, Gulab Jamun",
-        "snacks": "Veg Cutlet / Samosa, Mint Chutney, Tea & Coffee",
-        "dinner": "Paneer Butter Masala, Dal Makhani, Jeera Rice, Chapati, Kheer, Green Salad"
+        "breakfast": "Aloo Pyaz Paratha, Curd, Pickle, Boiled Eggs / Omelette, Bread, Butter, Jam, Tea & Coffee",
+        "lunch": "Rajma Masala, Aloo Jeera, Steamed Rice, Roti, Boondi Raita, Fresh Green Salad, Gulab Jamun",
+        "snacks": "Veg Cutlet / Samosa, Mint & Tamarind Chutney, Hot Tea & Coffee",
+        "dinner": "Paneer Butter Masala, Dal Makhani, Jeera Rice, Tawa Butter Roti, Kheer, Salad"
     },
     "Tuesday": {
-        "breakfast": "Idli, Vada, Sambar, Coconut Chutney, Boiled Eggs, Toast, Butter, Jam, Tea & Coffee",
-        "lunch": "Kadhi Pakora, Aloo Methi, Steamed Rice, Phulka, Mix Veg Raita, Salad, Papad",
-        "snacks": "Poha with Sev, Lemon, Tea & Coffee",
-        "dinner": "Mix Veg Curry, Dal Tadka, Peas Pulao, Butter Roti, Ice Cream, Salad"
+        "breakfast": "Idli, Medu Vada, Sambar, Coconut Chutney, Boiled Eggs, Toast, Butter, Jam, Tea & Coffee",
+        "lunch": "Punjabi Kadhi Pakora, Aloo Methi, Steamed Basmati Rice, Phulka, Mix Veg Raita, Salad, Papad",
+        "snacks": "Indori Poha with Sev & Fried Peanuts, Lemon, Hot Tea & Coffee",
+        "dinner": "Mix Veg Curry, Dal Tadka, Peas Pulao, Butter Roti, Ice Cream / Sweet, Salad"
     },
     "Wednesday": {
-        "breakfast": "Puri Bhaji, Halwa, Scrambled Eggs, Bread, Butter, Jam, Tea & Coffee",
-        "lunch": "Chole Bhature / Rice, Aloo Gobhi Dry, Boondi Raita, Onion Salad, Pickle",
-        "snacks": "Pasta / White Sauce Macaroni, Sauce, Tea & Coffee",
-        "dinner": "Egg Curry / Shahi Paneer, Dal Fry, Jeera Rice, Tandoori Roti, Custard, Salad"
+        "breakfast": "Puri Bhaji, Suji Halwa, Scrambled Eggs, Bread, Butter, Jam, Tea & Coffee",
+        "lunch": "Amritsari Chole Bhature / Jeera Rice, Aloo Gobhi Dry, Boondi Raita, Onion Pickle Salad",
+        "snacks": "Red Sauce / White Sauce Pasta, Chilli Flakes & Oregano, Hot Tea & Coffee",
+        "dinner": "Egg Curry / Shahi Paneer, Dal Fry, Jeera Rice, Tandoori Roti, Fruit Custard, Salad"
     },
     "Thursday": {
-        "breakfast": "Uttapam, Sambar, Tomato Chutney, Boiled Eggs, Bread, Butter, Jam, Tea & Coffee",
-        "lunch": "Dal Makhani, Bhindi Masala, Steamed Rice, Phulka, Cucumber Raita, Salad",
-        "snacks": "Bread Pakora, Green Chutney, Tea & Coffee",
-        "dinner": "Kadai Paneer, Yellow Dal, Veg Biryani / Pulao, Naan/Roti, Sewaiyan, Salad"
+        "breakfast": "Uttapam, Sambar, Tomato & Coconut Chutney, Boiled Eggs, Bread, Butter, Jam, Tea & Coffee",
+        "lunch": "Dal Makhani, Bhindi Masala, Steamed Rice, Phulka, Cucumber Mint Raita, Salad",
+        "snacks": "Bread Pakora with Green Chutney & Sauce, Hot Tea & Coffee",
+        "dinner": "Kadai Paneer, Yellow Dal Tadka, Veg Dum Pulao, Butter Naan / Tandoori Roti, Sewaiyan, Salad"
     },
     "Friday": {
-        "breakfast": "Pav Bhaji, Boiled Eggs, Bread, Butter, Jam, Tea & Coffee",
-        "lunch": "Rajma Chawal, Aloo Shimla Mirch, Roti, Curd, Green Salad, Papad",
-        "snacks": "Bhel Puri / Maggi, Tea & Coffee",
-        "dinner": "Chicken Curry / Paneer Lababdar, Dal Tadka, Steamed Rice, Tandoori Roti, Halwa, Salad"
+        "breakfast": "Pav Bhaji (Amul Butter), Boiled Eggs, Bread, Butter, Jam, Tea & Coffee",
+        "lunch": "Rajma Chawal, Aloo Shimla Mirch, Fresh Phulka, Plain Curd, Green Salad, Roasted Papad",
+        "snacks": "Bhel Puri / Maggi Noodles, Tomato Ketchup, Hot Tea & Coffee",
+        "dinner": "Chicken Curry / Paneer Lababdar, Dal Tadka, Steamed Rice, Tandoori Roti, Gajar Halwa, Salad"
     },
     "Saturday": {
-        "breakfast": "Methi Thepla / Paratha, Curd, Omelette, Bread, Butter, Jam, Tea & Coffee",
-        "lunch": "Chana Masala, Aloo Baingan, Steamed Rice, Phulka, Pineapple Raita, Salad",
-        "snacks": "Veg Sandwich, Tomato Ketchup, Tea & Coffee",
-        "dinner": "Matar Paneer, Dal Fry, Jeera Rice, Butter Naan, Sweet / Brownie, Salad"
+        "breakfast": "Methi Thepla / Gobhi Paratha, Curd, Omelette, Bread, Butter, Jam, Tea & Coffee",
+        "lunch": "Pindi Chana Masala, Aloo Baingan Bharta, Steamed Rice, Phulka, Pineapple Raita, Salad",
+        "snacks": "Grilled Veg Sandwich, Tomato Ketchup, Hot Tea & Coffee",
+        "dinner": "Matar Paneer, Dal Fry, Jeera Rice, Butter Naan, Chocolate Brownie / Sweet, Salad"
     },
     "Sunday": {
-        "breakfast": "Masala Dosa, Sambar, Coconut & Tomato Chutney, Boiled Eggs, Bread, Butter, Tea",
-        "lunch": "Special Veg Dum Biryani / Chicken Biryani, Mirchi Ka Salan, Boondi Raita, Gulab Jamun",
-        "snacks": "Cookies / Biscuits, French Fries, Tea & Coffee",
-        "dinner": "Special Thali: Shahi Paneer, Dal Makhani, Pulao, Missi Roti, Ice Cream"
+        "breakfast": "Mysore Masala Dosa, Sambar, Coconut & Tomato Chutney, Boiled Eggs, Bread, Butter, Tea",
+        "lunch": "Special Hyderabadi Dum Biryani (Chicken & Veg), Mirchi Ka Salan, Onion Raita, Gulab Jamun",
+        "snacks": "Crispy French Fries / Spring Rolls, Cookies, Hot Tea & Coffee",
+        "dinner": "Sunday Special Feast: Shahi Paneer, Dal Makhani, Peas Pulao, Butter Roti, Ice Cream"
     }
 }
 
@@ -54,37 +54,38 @@ def get_ist_now():
 
 def get_current_meal_type():
     """
-    Determines meal type according to the time of day:
-    - 00:00 - 11:00: Breakfast
-    - 11:00 - 15:30: Lunch
-    - 15:30 - 19:00: High Tea / Snacks
-    - 19:00 - 23:59: Dinner
+    Determines meal type according to the 12-hour time of day:
+    - 12:00 AM - 11:00 AM: Breakfast
+    - 11:00 AM - 03:30 PM: Lunch
+    - 03:30 PM - 07:00 PM: High Tea / Snacks
+    - 07:00 PM - 11:59 PM: Dinner
     """
     now = get_ist_now().time()
     if now < time(11, 0):
-        return "breakfast", "🍳 Breakfast (07:30 - 10:30)"
+        return "breakfast", "🍳 Breakfast (07:30 AM - 10:30 AM)"
     elif now < time(15, 30):
-        return "lunch", "🍛 Lunch (12:00 - 14:30)"
+        return "lunch", "🍱 Lunch (12:00 PM - 02:30 PM)"
     elif now < time(19, 0):
-        return "snacks", "☕ High Tea / Snacks (17:00 - 18:30)"
+        return "snacks", "☕ High Tea / Snacks (05:00 PM - 06:30 PM)"
     else:
-        return "dinner", "🍲 Dinner (19:30 - 22:30)"
+        return "dinner", "🍲 Dinner (07:30 PM - 10:30 PM)"
 
 def get_meal_info(meal_key: str = None, day: str = None) -> dict:
-    """Returns the menu for given meal or current meal according to time."""
+    """Returns the menu for given meal or current meal according to 12-hour IST time."""
     now_ist = get_ist_now()
     current_day = day or now_ist.strftime("%A")
+
+    labels_12h = {
+        "breakfast": "🍳 Breakfast (07:30 AM - 10:30 AM)",
+        "lunch": "🍱 Lunch (12:00 PM - 02:30 PM)",
+        "snacks": "☕ High Tea / Snacks (05:00 PM - 06:30 PM)",
+        "dinner": "🍲 Dinner (07:30 PM - 10:30 PM)"
+    }
 
     if not meal_key:
         meal_key, meal_label = get_current_meal_type()
     else:
-        labels = {
-            "breakfast": "🍳 Breakfast (07:30 - 10:30)",
-            "lunch": "🍛 Lunch (12:00 - 14:30)",
-            "snacks": "☕ High Tea / Snacks (17:00 - 18:30)",
-            "dinner": "🍲 Dinner (19:30 - 22:30)"
-        }
-        meal_label = labels.get(meal_key, meal_key.capitalize())
+        meal_label = labels_12h.get(meal_key, meal_key.capitalize())
 
     day_menu = BENNETT_MESS_MENU.get(current_day, BENNETT_MESS_MENU["Monday"])
     menu_items = day_menu.get(meal_key, "Menu not available.")
