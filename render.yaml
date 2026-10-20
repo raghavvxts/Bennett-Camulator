@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: bennett-camulator
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PARENT_EMAIL
+        sync: false
+      - key: PARENT_PASSWORD
+        sync: false
+      - key: API_SECRET_KEY
+        sync: false
