@@ -362,7 +362,10 @@ async def myid_command(update, context):
 
 def is_owner(update):
     owner = os.getenv('OWNER_TELEGRAM_ID', '').strip()
-    return update.effective_chat.type == 'private' and bool(owner) and str(update.effective_user.id) == owner
+    username = os.getenv('OWNER_TELEGRAM_USERNAME', '').strip().lstrip('@').casefold()
+    actual_username = (getattr(update.effective_user, 'username', None) or '').casefold()
+    return (update.effective_chat.type == 'private' and bool(owner) and bool(username)
+            and str(update.effective_user.id) == owner and actual_username == username)
 
 
 def owner_command_name():

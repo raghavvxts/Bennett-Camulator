@@ -50,11 +50,12 @@ class DirectoryTests(unittest.TestCase):
 class OwnerCommandTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         isolate_database(self)
+        self.enterContext(patch.dict(os.environ, {'OWNER_TELEGRAM_USERNAME':'test_owner'}))
         owner_access.set_password("owner-test-password")
         self.status = SimpleNamespace(edit_text=AsyncMock())
         self.message = SimpleNamespace(reply_text=AsyncMock(return_value=self.status), message_id=77, text="owner-test-password")
         self.update = SimpleNamespace(effective_chat=SimpleNamespace(type='private', id=42),
-            effective_user=SimpleNamespace(id=42), effective_message=self.message, message=self.message)
+            effective_user=SimpleNamespace(id=42, username='test_owner'), effective_message=self.message, message=self.message)
         self.context = SimpleNamespace(args=[], user_data={}, bot=SimpleNamespace(delete_message=AsyncMock()))
 
     async def test_non_owner_and_unconfigured_owner_cannot_read_directory(self):

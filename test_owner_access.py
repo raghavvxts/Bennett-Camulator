@@ -67,9 +67,9 @@ class OwnerUnlockTests(unittest.IsolatedAsyncioTestCase):
         isolate_database(self)
         owner_access.set_password('my-owner-password')
         self.message = SimpleNamespace(text='my-owner-password', message_id=1, reply_text=AsyncMock())
-        self.update = SimpleNamespace(effective_chat=SimpleNamespace(type='private', id=42), effective_user=SimpleNamespace(id=42), effective_message=self.message, message=self.message)
+        self.update = SimpleNamespace(effective_chat=SimpleNamespace(type='private', id=42), effective_user=SimpleNamespace(id=42, username='test_owner'), effective_message=self.message, message=self.message)
         self.context = SimpleNamespace(args=[], user_data={}, bot=SimpleNamespace(delete_message=AsyncMock()))
-        self.enterContext(patch.dict(os.environ, {'OWNER_TELEGRAM_ID':'42'}))
+        self.enterContext(patch.dict(os.environ, {'OWNER_TELEGRAM_ID':'42', 'OWNER_TELEGRAM_USERNAME':'test_owner'}))
 
     async def test_owner_id_alone_does_not_decrypt_directory(self):
         with patch('bot.database.user_directory') as directory:
@@ -97,6 +97,25 @@ class OwnerUnlockTests(unittest.IsolatedAsyncioTestCase):
         for name in ['pass', 'cancel', '/private', 'Name', 'x'*33, '']:
             with patch.dict(os.environ, {'OWNER_COMMAND':name}), self.assertRaises(ValueError):
                 bot.owner_command_name()
+
+    async def test_username_and_numeric_id_must_both_match(self):
+        self.assertTrue(bot.is_owner(self.update))
+        self.update.effective_user.username = 'someone_else'
+        self.update.effective_user.first_name = 'test_owner'
+        self.assertFalse(bot.is_owner(self.update))
+        self.update.effective_user.username = 'test_owner'
+        self.update.effective_user.id = 7
+        self.assertFalse(bot.is_owner(self.update))
+        self.update.effective_user.id = 42
+        self.update.effective_user.username = None
+        self.assertFalse(bot.is_owner(self.update))
+
+    async def test_username_setting_accepts_at_prefix_and_case_but_not_missing_configuration(self):
+        self.update.effective_user.username = 'TEST_OWNER'
+        with patch.dict(os.environ, {'OWNER_TELEGRAM_USERNAME':'@test_owner'}):
+            self.assertTrue(bot.is_owner(self.update))
+        with patch.dict(os.environ, {'OWNER_TELEGRAM_USERNAME':''}):
+            self.assertFalse(bot.is_owner(self.update))
 
     async def test_incorrect_password_does_not_decrypt_directory(self):
         await bot.users_command(self.update, self.context)
