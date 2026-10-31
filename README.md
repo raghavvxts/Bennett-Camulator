@@ -43,6 +43,7 @@ Configure `.env` in this repository:
 
 - `TELEGRAM_BOT_TOKEN`: enables the Telegram worker.
 - `OWNER_TELEGRAM_ID`: your numeric Telegram ID from `/myid`; required for private owner-only `/users`. Leave unset to disable the owner directory.
+- `OWNER_COMMAND`: optional private owner-command name, without `/` (lowercase letters/digits/underscores, starting with a letter, up to 32 characters). Defaults to `users`. Choose a non-public value in hosting settings; it never appears in the bot menu, buttons or feature/help text. Unauthorized calls are silently ignored. Public command names cannot be reused.
 - `OWNER_PASSWORD_HASH`: optional salted scrypt verifier for the separate owner password. Without this setting, configure the password using `python admin_users.py --set-password`; its verifier is stored in an owner-only `.owner-password.hash` file in the data directory, excluded from Git and Docker images. Never hardcode this ID in source.
 - `API_SECRET_KEY`: optional owner-only shortcut API key for the environment-configured parent account. Other users generate their own key with `/shortcut`. No public default key is accepted. Generate a strong value, for example with `python -c 'import secrets; print(secrets.token_urlsafe(32))'`.
 - `PARENT_EMAIL`, `PARENT_PASSWORD`: optional single-account shortcut credentials. Telegram users link their own accounts.
@@ -58,6 +59,8 @@ Telegram commands: `/start`, `/login`, `/pass`, `/cancel`, `/menu`, `/attendance
 ## Owner account directory
 
 In a private chat, use `/myid`, then set `OWNER_TELEGRAM_ID` to that value in hosting secrets and restart the service. In your private server console, run `python admin_users.py --set-password` and choose a separate password of at least 12 characters. Setup prompts hide the input; the plaintext owner password is never stored. Changing an existing password through this command requires the current password.
+
+The owner command is manually typed in private chat and is not advertised in bot menus, buttons or feature/help messages. Set `OWNER_COMMAND` in hosting secrets to choose your own private name, then restart; the default examples below use `/users`. If you customize the name, use that name instead. Unauthorized callers get no response, even if they guess it. Concealment supplements the Telegram-ID and password checks; it does not replace them.
 
 Every `/users` request requires the configured Telegram ID **and** a fresh owner password. The prompt expires after two minutes, and five wrong attempts lock owner access for 15 minutes, including across restarts. The incoming owner-password message is deleted before verification; if deletion fails, disclosure is cancelled. No reusable unlocked session is kept. `/cancel` stops the prompt. After successful verification, `/users` lists linked accounts with student names, Telegram IDs, emails, decrypted passwords and linked dates; `/users 2` shows the next page. It is denied to other Telegram IDs and in group chats. This lists currently linked accounts, not live activity or users who have logged out.
 

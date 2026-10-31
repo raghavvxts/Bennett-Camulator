@@ -76,6 +76,28 @@ class OwnerUnlockTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await bot.users_command(self.update, self.context), bot.OWNER_UNLOCK)
             directory.assert_not_called()
 
+    async def test_private_command_is_absent_from_public_menu_help_and_buttons(self):
+        app = SimpleNamespace(bot=SimpleNamespace(set_my_commands=AsyncMock()), bot_data={})
+        with patch.dict(os.environ, {'OWNER_COMMAND':'private_test_gate'}), patch('bot.bot_heartbeat', new=AsyncMock(return_value=None)):
+            await bot.post_init(app)
+            await app.bot_data['heartbeat_task']
+            commands = app.bot.set_my_commands.call_args.args[0]
+            self.assertNotIn('private_test_gate', [command.command for command in commands])
+            self.assertNotIn('users', [command.command for command in commands])
+            await bot.features_command(self.update, self.context)
+            self.assertNotIn('/private_test_gate', self.message.reply_text.call_args.args[0])
+            for row in bot.get_main_keyboard().inline_keyboard:
+                for button in row:
+                    self.assertNotIn('private_test_gate', button.text)
+                    self.assertNotIn('private_test_gate', button.callback_data or '')
+
+    async def test_custom_command_name_validation(self):
+        with patch.dict(os.environ, {'OWNER_COMMAND':'private_test_gate'}):
+            self.assertEqual(bot.owner_command_name(), 'private_test_gate')
+        for name in ['pass', 'cancel', '/private', 'Name', 'x'*33, '']:
+            with patch.dict(os.environ, {'OWNER_COMMAND':name}), self.assertRaises(ValueError):
+                bot.owner_command_name()
+
     async def test_incorrect_password_does_not_decrypt_directory(self):
         await bot.users_command(self.update, self.context)
         self.message.text = 'wrong'

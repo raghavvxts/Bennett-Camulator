@@ -3,6 +3,7 @@ import logging
 import asyncio
 import time as clock
 import owner_access
+import re
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from weakref import WeakValueDictionary
@@ -364,9 +365,17 @@ def is_owner(update):
     return update.effective_chat.type == 'private' and bool(owner) and str(update.effective_user.id) == owner
 
 
+def owner_command_name():
+    name = os.getenv('OWNER_COMMAND', 'users').strip()
+    if not re.fullmatch(r'[a-z][a-z0-9_]{0,31}', name):
+        raise ValueError('OWNER_COMMAND must contain 1–32 lowercase letters, digits or underscores, starting with a letter.')
+    if name in {'start', 'restart', 'login', 'pass', 'cancel', 'menu', 'attendance', 'features', 'shortcut', 'myid'}:
+        raise ValueError('OWNER_COMMAND must not replace a public bot command.')
+    return name
+
+
 async def users_command(update, context):
     if not is_owner(update):
-        await update.effective_message.reply_text('Owner access only.')
         return ConversationHandler.END
     try:
         owner_access.configured_hash()
@@ -378,7 +387,7 @@ async def users_command(update, context):
         if page < 1:
             raise ValueError()
     except ValueError:
-        await update.message.reply_text('Use /users or /users 2 with a positive page number. Send the owner password only when prompted.')
+        await update.message.reply_text(f'Use /{owner_command_name()} with a positive page number. Send the owner password only when prompted.')
         return ConversationHandler.END
     context.user_data['_owner_page'] = page
     context.user_data['_owner_requested_at'] = clock.time()
@@ -390,7 +399,6 @@ async def receive_owner_password(update, context):
     page = context.user_data.pop('_owner_page', None)
     requested = context.user_data.pop('_owner_requested_at', 0)
     if not is_owner(update):
-        await update.effective_message.reply_text('Owner access only.')
         return ConversationHandler.END
     try:
         await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=update.message.message_id)
@@ -398,7 +406,7 @@ async def receive_owner_password(update, context):
         await update.message.reply_text('Could not delete the password message. Unlock cancelled; remove it from the chat yourself.')
         return ConversationHandler.END
     if page is None or not 0 <= clock.time()-requested < 120:
-        await update.effective_message.reply_text('Owner unlock request expired. Start again with /users.')
+        await update.effective_message.reply_text(f'Owner unlock request expired. Start again with /{owner_command_name()}.')
         return ConversationHandler.END
     try:
         valid = await asyncio.to_thread(owner_access.authenticate, update.message.text)
@@ -406,7 +414,7 @@ async def receive_owner_password(update, context):
         await update.message.reply_text(str(exc))
         return ConversationHandler.END
     if not valid:
-        await update.message.reply_text('Incorrect owner password. No credentials were revealed. Start again with /users.')
+        await update.message.reply_text(f'Incorrect owner password. No credentials were revealed. Start again with /{owner_command_name()}.')
         return ConversationHandler.END
     total, users = await asyncio.to_thread(database.user_directory, page, include_passwords=True)
     lines = [f'Linked accounts: {total} — page {page}/{max(1,(total+19)//20)}']
@@ -721,7 +729,7 @@ def main():
 
     app.add_handler(ConversationHandler(
         entry_points=[
-            CommandHandler("users", users_command),
+            CommandHandler(owner_command_name(), users_command),
             CommandHandler("login", start_login_step),
             CallbackQueryHandler(start_login_step, pattern="^btn_start_login$"),
             CommandHandler("pass", pass_command),

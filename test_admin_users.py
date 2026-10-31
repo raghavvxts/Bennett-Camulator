@@ -62,7 +62,7 @@ class OwnerCommandTests(unittest.IsolatedAsyncioTestCase):
             with patch.dict(os.environ, {'OWNER_TELEGRAM_ID': owner}), patch('bot.database.user_directory') as directory:
                 await bot.users_command(self.update, self.context)
                 directory.assert_not_called()
-        self.assertEqual(self.message.reply_text.call_args.args[0], 'Owner access only.')
+        self.message.reply_text.assert_not_awaited()
 
     async def test_owner_can_see_identifiers_and_passwords_but_not_sessions(self):
         database.save_user(3, 'linked@example.test', 'never-send-this-password', 'Student', 'student', 'college', {'session':'never-send-this-cookie'})
