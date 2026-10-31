@@ -621,3 +621,107 @@ test("owner deletion failure prevents credential disclosure", async (t) => {
   assert.ok(!messages.some((text) => text.includes("synthetic-secret")));
   assert.equal(await store.state(123), null);
 });
+function callback(data: string): Update {
+  return {
+    update_id: 99,
+    callback_query: {
+      id: "picker",
+      data,
+      from: { id: 123, username: "owner_test" },
+      message: { message_id: 10, chat: { id: 123, type: "private" } },
+    },
+  };
+}
+test("after 7 PM a next-day pass time is selected entirely with clock buttons", async (t) => {
+  t.mock.method(Date, "now", () => Date.parse("2026-11-01T20:00:00+05:30"));
+  const { env, store } = fixture(),
+    calls = telegramMock(t),
+    tg = new Telegram(env, store);
+  await store.saveAccount(123, profile());
+  await tg.handle(update("/daypass"));
+  assert.equal((await store.state(123))!.step, "tomorrow");
+  await tg.handle(callback("tomorrow"));
+  const hourPrompt = calls.at(-1)!.data;
+  assert.match(String(hourPrompt.text), /Choose the hour/);
+  assert.match(
+    JSON.stringify(hourPrompt.reply_markup),
+    /clock:2026-11-02:hour:18/,
+  );
+  await tg.handle(callback("clock:2026-11-02:hour:18"));
+  await tg.handle(callback("clock:2026-11-02:minute:55"));
+  await tg.handle(callback("clock:2026-11-02:adjust:1"));
+  await tg.handle(callback("clock:2026-11-02:use:0"));
+  const state = await store.state(123);
+  assert.equal(state!.step, "confirm");
+  assert.equal(state!.departure, "2026-11-02T18:56:00+05:30");
+  assert.match(String(calls.at(-1)!.data.text), /Reason: Going out/);
+  assert.ok(
+    !JSON.stringify(calls.at(-1)!.data.reply_markup).includes("Change reason"),
+  );
+  assert.equal(calls.filter((c) => c.method === "editMessageText").length, 3);
+});
+test("picker wraps minute controls, supports back, and rejects invalid or stale buttons", async (t) => {
+  t.mock.method(Date, "now", () => fixed);
+  const { env, store } = fixture();
+  telegramMock(t);
+  const tg = new Telegram(env, store);
+  await store.saveAccount(123, profile());
+  await store.setState(123, { step: "time", date: "2026-11-02" });
+  await assert.rejects(
+    tg.handle(callback("clock:2026-11-01:hour:10")),
+    /expired/,
+  );
+  await assert.rejects(
+    tg.handle(callback("clock:2026-11-02:hour:19")),
+    /Choose an hour/,
+  );
+  await tg.handle(callback("clock:2026-11-02:hour:6"));
+  await tg.handle(callback("clock:2026-11-02:adjust:-1"));
+  assert.equal((await store.state(123))!.minute, 59);
+  await tg.handle(callback("clock:2026-11-02:adjust:1"));
+  assert.equal((await store.state(123))!.minute, 0);
+  await assert.rejects(
+    tg.handle(callback("clock:2026-11-02:minute:60")),
+    /valid minutes/,
+  );
+  await tg.handle(callback("clock:2026-11-02:back:0"));
+  assert.equal((await store.state(123))!.hour, undefined);
+  await assert.rejects(
+    tg.handle(callback("clock:2026-11-02:use:0")),
+    /hour first/,
+  );
+});
+test("before 6 AM uses the picker and refuses times that have already passed", async (t) => {
+  let now = Date.parse("2026-11-01T05:59:00+05:30");
+  t.mock.method(Date, "now", () => now);
+  const { env, store } = fixture(),
+    calls = telegramMock(t),
+    tg = new Telegram(env, store);
+  await store.saveAccount(123, profile());
+  await tg.handle(update("/daypass"));
+  assert.equal((await store.state(123))!.date, "2026-11-01");
+  assert.match(String(calls.at(-1)!.data.text), /Choose the hour/);
+  await tg.handle(callback("clock:2026-11-01:hour:6"));
+  now = Date.parse("2026-11-01T06:01:00+05:30");
+  await assert.rejects(
+    tg.handle(callback("clock:2026-11-01:use:0")),
+    /future departure/,
+  );
+});
+test("confirmation discards legacy custom reason drafts and has no reason-edit action", async (t) => {
+  const { env, store } = fixture(),
+    calls = telegramMock(t),
+    tg = new Telegram(env, store);
+  await tg.confirm(123, {
+    step: "confirm",
+    date: "2026-11-02",
+    ...{ reason: "Legacy custom text" },
+  });
+  const saved = await store.state(123);
+  assert.ok(!("reason" in saved!));
+  assert.match(String(calls.at(-1)!.data.text), /Reason: Going out/);
+  assert.ok(!JSON.stringify(calls.at(-1)!.data).includes("Legacy custom text"));
+  assert.ok(
+    !JSON.stringify(calls.at(-1)!.data.reply_markup).includes("reason"),
+  );
+});

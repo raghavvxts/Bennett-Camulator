@@ -115,19 +115,69 @@ export class Telegram {
   }
   async confirm(id: number, state: State): Promise<void> {
     await this.store.setState(id, {
-      ...state,
       step: "confirm",
-      reason: state.reason || "Going out",
+      date: state.date,
+      departure: state.departure,
     });
     await this.send(
       id,
-      `Day Out Pass\nDate: ${state.date}\nDeparture: ${state.departure ? state.departure.slice(11, 16) + " IST" : "next available minute after portal checks"}\nReturn: 7 PM IST\nReason: ${state.reason || "Going out"}\n\nI’ll check existing leave and pass status first.`,
+      `Day Out Pass\nDate: ${state.date}\nDeparture: ${state.departure ? state.departure.slice(11, 16) + " IST" : "next available minute after portal checks"}\nReturn: 7 PM IST\nReason: Going out\n\nI’ll check existing leave and pass status first.`,
       [
         [{ text: "Create / reuse pass", callback_data: "submit" }],
-        [{ text: "Change reason", callback_data: "reason" }],
         [{ text: "Cancel", callback_data: "cancel" }],
       ],
     );
+  }
+  async pickTime(id: number, state: State, messageId?: number): Promise<void> {
+    if (!state.date)
+      throw new UserError("Date missing. Start a new pass request.");
+    await this.store.setState(id, state);
+    const rows: Buttons = [];
+    const pad = (n: number) => String(n).padStart(2, "0");
+    let text: string;
+    if (state.hour === undefined) {
+      const hours = Array.from({ length: 13 }, (_, i) => i + 6);
+      for (let i = 0; i < hours.length; i += 3)
+        rows.push(
+          hours.slice(i, i + 3).map((hour) => ({
+            text: `${hour % 12 || 12} ${hour < 12 ? "AM" : "PM"}`,
+            callback_data: `clock:${state.date}:hour:${hour}`,
+          })),
+        );
+      text = `🕒 Departure on ${state.date} (IST)\nChoose the hour. Return is 7 PM the same day.`;
+    } else {
+      const minute = state.minute ?? 0;
+      for (let i = 0; i < 60; i += 20)
+        rows.push(
+          Array.from({ length: 4 }, (_, j) => i + j * 5).map((value) => ({
+            text: `${value === minute ? "✓ " : ""}${pad(value)}`,
+            callback_data: `clock:${state.date}:minute:${value}`,
+          })),
+        );
+      rows.push([
+        { text: "−1 minute", callback_data: `clock:${state.date}:adjust:-1` },
+        { text: "+1 minute", callback_data: `clock:${state.date}:adjust:1` },
+      ]);
+      rows.push([
+        {
+          text: `Use ${pad(state.hour)}:${pad(minute)}`,
+          callback_data: `clock:${state.date}:use:0`,
+        },
+      ]);
+      rows.push([
+        { text: "Back to hours", callback_data: `clock:${state.date}:back:0` },
+      ]);
+      text = `🕒 Departure: ${state.date}, ${pad(state.hour)}:${pad(minute)} IST\nChoose minutes, then tap Use. ±1 minute allows any exact time.`;
+    }
+    rows.push([{ text: "Cancel", callback_data: "cancel" }]);
+    if (messageId !== undefined)
+      await this.call("editMessageText", {
+        chat_id: id,
+        message_id: messageId,
+        text,
+        reply_markup: { inline_keyboard: rows },
+      });
+    else await this.send(id, text, rows);
   }
   async beginPass(id: number): Promise<void> {
     const local = ist(),
@@ -145,11 +195,7 @@ export class Telegram {
         ],
       );
     } else if (local.slice(11, 16) < "06:00") {
-      await this.store.setState(id, { step: "time", date: local.slice(0, 10) });
-      await this.send(
-        id,
-        "Choose departure today, HH:MM (24-hour IST), from 06:00 to before 19:00.",
-      );
+      await this.pickTime(id, { step: "time", date: local.slice(0, 10) });
     } else await this.confirm(id, { step: "confirm", date: window.day });
   }
   async ownerList(id: number, page: number): Promise<void> {
@@ -203,7 +249,6 @@ export class Telegram {
       btn_back_main: "home",
       btn_start_login: "home",
       pass_submit: "submit",
-      pass_change_reason: "reason",
       pass_cancel: "cancel",
       pass_tomorrow_yes: "tomorrow",
       pass_tomorrow_no: "cancel",
@@ -405,11 +450,63 @@ export class Telegram {
         await this.store.setState(id, null);
         throw new UserError("Date changed. Start again.");
       }
-      await this.store.setState(id, { step: "time", date: state.date });
-      await this.send(
-        id,
-        "Choose tomorrow’s departure, HH:MM (24-hour IST), from 06:00 to before 19:00.",
-      );
+      await this.pickTime(id, { step: "time", date: state.date });
+      return;
+    }
+    if (action?.startsWith("clock:")) {
+      const match =
+        /^clock:(\d{4}-\d{2}-\d{2}):(hour|minute|adjust|use|back):(-?\d{1,2})$/.exec(
+          action,
+        );
+      if (!match || state?.step !== "time" || match[1] !== state.date)
+        throw new UserError(
+          "This time picker has expired. Start a new pass request.",
+        );
+      const [, , selection, raw] = match,
+        value = Number(raw);
+      if (selection === "hour") {
+        if (value < 6 || value > 18)
+          throw new UserError("Choose an hour from 6 AM to before 7 PM.");
+        if (state.hour !== value || (state.minute ?? 0) !== 0)
+          await this.pickTime(
+            id,
+            { ...state, hour: value, minute: 0 },
+            message.message_id,
+          );
+      } else if (selection === "back") {
+        await this.pickTime(
+          id,
+          { step: "time", date: state.date },
+          message.message_id,
+        );
+      } else {
+        if (state.hour === undefined || state.hour < 6 || state.hour > 18)
+          throw new UserError("Choose an hour first.");
+        if (selection === "minute") {
+          if (value < 0 || value > 59)
+            throw new UserError("Choose valid minutes.");
+          // An already-selected minute needs no edit (Telegram rejects unchanged messages).
+          if (value !== (state.minute ?? 0))
+            await this.pickTime(
+              id,
+              { ...state, minute: value },
+              message.message_id,
+            );
+        } else if (selection === "adjust") {
+          if (value !== -1 && value !== 1)
+            throw new UserError("Invalid minute adjustment.");
+          await this.pickTime(
+            id,
+            { ...state, minute: ((state.minute ?? 0) + value + 60) % 60 },
+            message.message_id,
+          );
+        } else {
+          const time = `${String(state.hour).padStart(2, "0")}:${String(state.minute ?? 0).padStart(2, "0")}`;
+          const departure = `${state.date}T${time}:00+05:30`;
+          windowFor(departure);
+          await this.confirm(id, { ...state, departure });
+        }
+      }
       return;
     }
     if (!action && !command && state?.step === "time") {
@@ -425,17 +522,6 @@ export class Telegram {
       await this.confirm(id, { ...state, departure });
       return;
     }
-    if (action === "reason" && state?.step === "confirm") {
-      await this.store.setState(id, { ...state, step: "reason" });
-      await this.send(id, "Enter the outing reason (1–500 characters).");
-      return;
-    }
-    if (!action && !command && state?.step === "reason") {
-      if (!text.trim() || text.length > 500)
-        throw new UserError("Reason must be 1–500 characters.");
-      await this.confirm(id, { ...state, reason: text.trim() });
-      return;
-    }
     if (action === "submit" && state?.step === "confirm") {
       if (
         !state.date ||
@@ -449,7 +535,7 @@ export class Telegram {
       const client = await this.client(id),
         result = await client.createPass(
           this.store,
-          state.reason || "Going out",
+          "Going out",
           state.departure,
         );
       if (result.needs_next_day) {

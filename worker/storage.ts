@@ -10,12 +10,12 @@ export interface Profile {
   cookies: Record<string, string>;
 }
 export interface State {
-  step:
-    "email" | "password" | "tomorrow" | "time" | "confirm" | "reason" | "owner";
+  step: "email" | "password" | "tomorrow" | "time" | "confirm" | "owner";
   email?: string;
   date?: string;
   departure?: string;
-  reason?: string;
+  hour?: number;
+  minute?: number;
   page?: number;
 }
 export class Store {

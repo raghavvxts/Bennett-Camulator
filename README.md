@@ -4,6 +4,8 @@ A multi-user Telegram bot for Bennett University's MyCamu parent portal. The cur
 
 ## Cloudflare deployment (current)
 
+The deployed Telegram bot always uses **Going out** as the reason; there is no reason-editing feature. Before 6 AM and when selecting tomorrow after closing, hour/minute buttons and ±1-minute controls select an exact departure without typing. Return remains 7 PM IST on the selected day.
+
 Workers serves Telegram webhooks and the personal shortcut API. D1 stores account records, expiring conversations, update deduplication, and atomic per-account pass locks. Credentials, portal cookies, and conversations use AES-256-GCM with account-specific authenticated context. The key is a Cloudflare secret; it must be retained across deployments. Logout revokes the personal shortcut key and removes the linked account and conversation.
 
 There is no always-on Python process or Render dependency. Workers and D1 use their free plans, with finite request, CPU and database quotas. University availability, limits and approval policies still apply; 100 simulated accounts do not prove live capacity or guarantee success.
