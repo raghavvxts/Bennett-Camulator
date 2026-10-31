@@ -42,6 +42,7 @@ cp .env.example .env
 Configure `.env` in this repository:
 
 - `TELEGRAM_BOT_TOKEN`: enables the Telegram worker.
+- `OWNER_TELEGRAM_ID`: your numeric Telegram ID from `/myid`; enables private owner-only `/users`. Leave unset to disable the owner directory. Never hardcode this ID in source.
 - `API_SECRET_KEY`: optional owner-only shortcut API key for the environment-configured parent account. Other users generate their own key with `/shortcut`. No public default key is accepted. Generate a strong value, for example with `python -c 'import secrets; print(secrets.token_urlsafe(32))'`.
 - `PARENT_EMAIL`, `PARENT_PASSWORD`: optional single-account shortcut credentials. Telegram users link their own accounts.
 - `CAMULATOR_DATA_DIR`: persistent directory for the database, encryption key, drafts, locks and backups; defaults to this repository locally.
@@ -52,6 +53,14 @@ Run `bash start.sh`. It loads `.env` and supervises the API plus the optional Te
 `/health` checks the Telegram event-loop heartbeat when the bot is enabled and returns HTTP 503 when it is missing or stale. Without a Telegram token it checks the API alone. Health checks do not log into MyCamu or guarantee the university portal is available.
 
 Telegram commands: `/start`, `/login`, `/pass`, `/cancel`, `/menu`, `/attendance`, `/restart`, `/features`, `/shortcut`.
+
+## Owner account directory
+
+In a private chat, use `/myid`, then set `OWNER_TELEGRAM_ID` to that value in hosting secrets and restart the service. `/users` lists linked accounts with student names, Telegram IDs, emails and linked dates; `/users 2` shows the next page. It is denied to other Telegram IDs and in group chats. This lists currently linked accounts, not live activity or users who have logged out.
+
+Passwords and session cookies are not sent through the owner command. If you explicitly need saved passwords, run `python admin_users.py --show-passwords` in your private server console with access to the database and its original encryption key. Without that flag, `python admin_users.py` shows identifiers only. This is a local operator tool, not a network-accessible credential export. Do not share console output containing passwords. Account linking tells users that the server operator can access stored credentials.
+
+Making the source repository private does not move or delete the runtime database. The hosting provider still needs authorized access to the private repository for future builds and deployments.
 
 ## Storage, migration and backups
 

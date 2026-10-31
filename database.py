@@ -121,6 +121,21 @@ def get_user(telegram_id):
     return user
 
 
+def user_directory(page=1, page_size=20):
+    if page < 1 or page_size < 1:
+        raise ValueError('Page and page size must be positive.')
+    with connect() as conn:
+        conn.row_factory = sqlite3.Row
+        total = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
+        offset = (page-1)*page_size
+        rows = conn.execute('''SELECT telegram_id,email,student_name,created_at FROM users
+            ORDER BY created_at DESC,telegram_id DESC LIMIT ? OFFSET ?''', (page_size,offset)).fetchall() if offset < total else []
+    users = [dict(row) for row in rows]
+    for user in users:
+        user['email'] = decrypt(user['email'])
+    return total, users
+
+
 def update_user_cookies(telegram_id, cookies):
     with connect() as conn:
         conn.execute('UPDATE users SET cookies=? WHERE telegram_id=?', (encrypt(json.dumps(cookies)),telegram_id))

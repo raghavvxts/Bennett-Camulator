@@ -349,6 +349,32 @@ async def shortcut_command(update, context):
         'Send {} to use “Going out”, or {"reason":"your reason"}. '
         "Running /shortcut again replaces this key. Logout or switching accounts revokes it.")
 
+
+async def myid_command(update, context):
+    if update.effective_chat.type == 'private':
+        await update.message.reply_text(f"Your Telegram ID: {update.effective_user.id}")
+
+
+async def users_command(update, context):
+    owner = os.getenv('OWNER_TELEGRAM_ID', '').strip()
+    if update.effective_chat.type != 'private' or not owner or str(update.effective_user.id) != owner:
+        await update.effective_message.reply_text('Owner access only.')
+        return
+    try:
+        page = int(context.args[0]) if context.args else 1
+        total, users = await asyncio.to_thread(database.user_directory, page)
+    except ValueError:
+        await update.message.reply_text('Use /users or /users 2 with a positive page number.')
+        return
+    lines = [f'Linked accounts: {total} — page {page}/{max(1,(total+19)//20)}']
+    for user in users:
+        lines.append(f"\n{user['student_name'] or 'Student'}\nTelegram ID: {user['telegram_id']}\n"
+                     f"Account: {user['email']}\nLinked: {user['created_at']} UTC")
+    if not users:
+        lines.append('No linked accounts on this page.')
+    status = await update.message.reply_text('Loading linked accounts…')
+    await show_result(status, update.message, '\n'.join(lines), None)
+
 def attendance_text(att, name):
     overall = float(att["overall_pct"])
     blocks = max(0, min(10, int(overall // 10)))
@@ -417,6 +443,7 @@ async def receive_email_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "🔑 *Step 2 of 2: Password*\n\n"
         "Now send your Password.\n\n"
         "Your password and portal session are stored encrypted on this server for future requests. "
+        "The server operator can access these credentials. "
         "Use Logout / Switch Account to remove the saved account.\n\n"
         "🔒 _(Your message will be deleted immediately from this chat for security)_"
     )
@@ -675,6 +702,8 @@ def main():
     app.add_handler(CommandHandler("menu", menu_command))
     app.add_handler(CommandHandler("attendance", attendance_command))
     app.add_handler(CommandHandler("shortcut", shortcut_command))
+    app.add_handler(CommandHandler("myid", myid_command))
+    app.add_handler(CommandHandler("users", users_command))
     app.add_handler(CallbackQueryHandler(handle_button))
 
     print("🤖 Multi-User Telegram Bot is running!")
