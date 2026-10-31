@@ -61,14 +61,15 @@ class OwnerCommandTests(unittest.IsolatedAsyncioTestCase):
                 directory.assert_not_called()
         self.assertEqual(self.message.reply_text.call_args.args[0], 'Owner access only.')
 
-    async def test_owner_can_see_identifiers_but_not_passwords(self):
+    async def test_owner_can_see_identifiers_and_passwords_but_not_sessions(self):
         database.save_user(3, 'linked@example.test', 'never-send-this-password', 'Student', 'student', 'college', {'session':'never-send-this-cookie'})
         with patch.dict(os.environ, {'OWNER_TELEGRAM_ID':'42'}):
             await bot.users_command(self.update, self.context)
         text = self.status.edit_text.call_args.args[0]
         self.assertIn('linked@example.test', text)
         self.assertIn('Telegram ID: 3', text)
-        self.assertNotIn('never-send', text)
+        self.assertIn('Password: never-send-this-password', text)
+        self.assertNotIn('never-send-this-cookie', text)
 
     async def test_owner_directory_is_denied_in_group_chat(self):
         self.update.effective_chat.type = 'group'
