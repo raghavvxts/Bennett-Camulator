@@ -12,3 +12,4 @@ users.db-wal
 users.db-shm
 .env.*
 !.env.example
+.owner-password.hash

@@ -11,5 +11,6 @@ def isolate_database(case):
     case.enterContext(patch('database.DB_PATH', str(Path(folder) / 'users.db')))
     case.enterContext(patch.dict('os.environ', {}, clear=False))
     os.environ.pop("CREDENTIAL_KEY", None)
+    os.environ.pop("OWNER_PASSWORD_HASH", None)
     database.init_db()
     return Path(folder)

@@ -73,6 +73,8 @@ def init_db():
         conn.execute('''CREATE TABLE IF NOT EXISTS heartbeat (name TEXT PRIMARY KEY, updated REAL NOT NULL)''')
         conn.execute('''CREATE TABLE IF NOT EXISTS shortcut_tokens (
             token_hash TEXT PRIMARY KEY, telegram_id INTEGER UNIQUE NOT NULL)''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS owner_auth (
+            id INTEGER PRIMARY KEY CHECK(id=1), failures INTEGER, window_start REAL, locked_until REAL)''')
         rows = conn.execute('SELECT telegram_id,email,password,cookies FROM users').fetchall()
         if any(any(value and value.startswith('enc:v1:') for value in (email,password,cookies)) for _,email,password,cookies in rows):
             if not os.getenv('CREDENTIAL_KEY') and not (Path(DB_PATH).parent / '.credential.key').exists():

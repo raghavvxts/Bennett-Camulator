@@ -1,6 +1,8 @@
 import os
 import logging
 import asyncio
+import time as clock
+import owner_access
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from weakref import WeakValueDictionary
@@ -61,7 +63,7 @@ class ChatUpdateProcessor(BaseUpdateProcessor):
             await coroutine
 
 # States for login conversation
-AWAITING_EMAIL, AWAITING_PASSWORD, PASS_TOMORROW, PASS_TIME, PASS_REASON = range(5)
+AWAITING_EMAIL, AWAITING_PASSWORD, PASS_TOMORROW, PASS_TIME, PASS_REASON, OWNER_UNLOCK = range(6)
 
 def get_main_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
@@ -175,6 +177,8 @@ async def tomorrow_prompt(update, context):
 
 
 async def pass_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.pop("_owner_page", None)
+    context.user_data.pop("_owner_requested_at", None)
     if update.callback_query:
         await update.callback_query.answer()
     if not database.get_user(update.effective_user.id):
@@ -355,17 +359,56 @@ async def myid_command(update, context):
         await update.message.reply_text(f"Your Telegram ID: {update.effective_user.id}")
 
 
-async def users_command(update, context):
+def is_owner(update):
     owner = os.getenv('OWNER_TELEGRAM_ID', '').strip()
-    if update.effective_chat.type != 'private' or not owner or str(update.effective_user.id) != owner:
+    return update.effective_chat.type == 'private' and bool(owner) and str(update.effective_user.id) == owner
+
+
+async def users_command(update, context):
+    if not is_owner(update):
         await update.effective_message.reply_text('Owner access only.')
-        return
+        return ConversationHandler.END
+    try:
+        owner_access.configured_hash()
+    except ValueError as exc:
+        await update.message.reply_text(str(exc))
+        return ConversationHandler.END
     try:
         page = int(context.args[0]) if context.args else 1
-        total, users = await asyncio.to_thread(database.user_directory, page, include_passwords=True)
+        if page < 1:
+            raise ValueError()
     except ValueError:
-        await update.message.reply_text('Use /users or /users 2 with a positive page number.')
-        return
+        await update.message.reply_text('Use /users or /users 2 with a positive page number. Send the owner password only when prompted.')
+        return ConversationHandler.END
+    context.user_data['_owner_page'] = page
+    context.user_data['_owner_requested_at'] = clock.time()
+    await update.message.reply_text('Send your separate owner password to unlock this page. The message will be deleted. This request expires in 2 minutes. /cancel to stop.')
+    return OWNER_UNLOCK
+
+
+async def receive_owner_password(update, context):
+    page = context.user_data.pop('_owner_page', None)
+    requested = context.user_data.pop('_owner_requested_at', 0)
+    if not is_owner(update):
+        await update.effective_message.reply_text('Owner access only.')
+        return ConversationHandler.END
+    try:
+        await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=update.message.message_id)
+    except TelegramError:
+        await update.message.reply_text('Could not delete the password message. Unlock cancelled; remove it from the chat yourself.')
+        return ConversationHandler.END
+    if page is None or not 0 <= clock.time()-requested < 120:
+        await update.effective_message.reply_text('Owner unlock request expired. Start again with /users.')
+        return ConversationHandler.END
+    try:
+        valid = await asyncio.to_thread(owner_access.authenticate, update.message.text)
+    except ValueError as exc:
+        await update.message.reply_text(str(exc))
+        return ConversationHandler.END
+    if not valid:
+        await update.message.reply_text('Incorrect owner password. No credentials were revealed. Start again with /users.')
+        return ConversationHandler.END
+    total, users = await asyncio.to_thread(database.user_directory, page, include_passwords=True)
     lines = [f'Linked accounts: {total} — page {page}/{max(1,(total+19)//20)}']
     for user in users:
         lines.append(f"\n{user['student_name'] or 'Student'}\nTelegram ID: {user['telegram_id']}\n"
@@ -374,6 +417,7 @@ async def users_command(update, context):
         lines.append('No linked accounts on this page.')
     status = await update.message.reply_text('Loading linked accounts…')
     await show_result(status, update.message, '\n'.join(lines), None)
+    return ConversationHandler.END
 
 def attendance_text(att, name):
     overall = float(att["overall_pct"])
@@ -677,6 +721,7 @@ def main():
 
     app.add_handler(ConversationHandler(
         entry_points=[
+            CommandHandler("users", users_command),
             CommandHandler("login", start_login_step),
             CallbackQueryHandler(start_login_step, pattern="^btn_start_login$"),
             CommandHandler("pass", pass_command),
@@ -685,6 +730,7 @@ def main():
             CallbackQueryHandler(pass_tomorrow, pattern="^pass_tomorrow_(yes|no)$"),
         ],
         states={
+            OWNER_UNLOCK: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_owner_password)],
             AWAITING_EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_email_step)],
             AWAITING_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_password_step)],
             PASS_TOMORROW: [CallbackQueryHandler(pass_tomorrow, pattern="^pass_tomorrow_(yes|no)$")],
@@ -703,7 +749,6 @@ def main():
     app.add_handler(CommandHandler("attendance", attendance_command))
     app.add_handler(CommandHandler("shortcut", shortcut_command))
     app.add_handler(CommandHandler("myid", myid_command))
-    app.add_handler(CommandHandler("users", users_command))
     app.add_handler(CallbackQueryHandler(handle_button))
 
     print("🤖 Multi-User Telegram Bot is running!")
