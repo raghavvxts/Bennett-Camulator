@@ -328,7 +328,12 @@ export class Telegram {
       );
       return;
     }
-    const state = await this.store.state(id);
+    const needsState =
+      (!action && !command) ||
+      action === "tomorrow" ||
+      action === "submit" ||
+      action?.startsWith("clock:");
+    const state = needsState ? await this.store.state(id) : null;
     if (!action && !command && state?.step === "owner") {
       await this.store.setState(id, null);
       if (!(await this.delete(id, message.message_id))) {

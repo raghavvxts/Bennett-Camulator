@@ -725,3 +725,81 @@ test("confirmation discards legacy custom reason drafts and has no reason-edit a
     !JSON.stringify(calls.at(-1)!.data.reply_markup).includes("reason"),
   );
 });
+test("request-scoped account reads share one database query and unchanged credentials are not rewritten", async (t) => {
+  const { env, store } = fixture();
+  await store.saveAccount(123, profile());
+  const request = new Store(env),
+    spy = t.mock.method(env.DB, "prepare");
+  const [a, b] = await Promise.all([
+    request.account(123),
+    request.account(123),
+  ]);
+  assert.equal(a!.email, b!.email);
+  await request.saveAccount(123, a!);
+  const queries = spy.mock.calls.map((call) => String(call.arguments[0]));
+  assert.equal(
+    queries.filter((q) => q === "SELECT sealed FROM accounts WHERE id=?")
+      .length,
+    1,
+  );
+  assert.equal(
+    queries.filter((q) => q.startsWith("INSERT INTO accounts")).length,
+    0,
+  );
+  a!.cookies.session = "rotated-cookie";
+  await request.saveAccount(123, a!);
+  assert.equal(
+    (await new Store(env).account(123))!.cookies.session,
+    "rotated-cookie",
+  );
+});
+test("account cache does not cross requests and relinking still revokes API keys", async () => {
+  const { env, store } = fixture();
+  await store.saveAccount(123, profile());
+  const key = await store.shortcut(123);
+  const request = new Store(env);
+  await request.account(123);
+  await request.saveAccount(123, profile(), true);
+  assert.equal(await store.shortcutId(key), null);
+  await request.forget(123);
+  assert.equal(await request.account(123), null);
+  await new Store(env).saveAccount(123, profile("changed@example.invalid"));
+  assert.equal(
+    (await new Store(env).account(123))!.email,
+    "changed@example.invalid",
+  );
+});
+test("stateless navigation skips conversation reads while the clock still reads its draft", async (t) => {
+  t.mock.method(Date, "now", () => fixed);
+  const { env, store } = fixture();
+  await store.saveAccount(123, profile());
+  telegramMock(t);
+  const tg = new Telegram(env, new Store(env)),
+    spy = t.mock.method(env.DB, "prepare");
+  await tg.handle(update("/start"));
+  assert.ok(
+    !spy.mock.calls.some((call) =>
+      String(call.arguments[0]).startsWith("SELECT sealed FROM conversations"),
+    ),
+  );
+  await store.setState(123, { step: "time", date: "2026-11-02" });
+  await tg.handle(callback("clock:2026-11-02:hour:10"));
+  assert.ok(
+    spy.mock.calls.some((call) =>
+      String(call.arguments[0]).startsWith("SELECT sealed FROM conversations"),
+    ),
+  );
+});
+test("uncertainty markers are durably written without a redundant read-back", async (t) => {
+  const { env, store } = fixture(),
+    spy = t.mock.method(env.DB, "prepare");
+  assert.equal(await store.uncertain("test-account", true), true);
+  assert.ok(
+    !spy.mock.calls.some((call) =>
+      String(call.arguments[0]).startsWith("SELECT uncertain"),
+    ),
+  );
+  assert.equal(await new Store(env).uncertain("test-account"), true);
+  assert.equal(await store.uncertain("test-account", false), false);
+  assert.equal(await new Store(env).uncertain("test-account"), false);
+});

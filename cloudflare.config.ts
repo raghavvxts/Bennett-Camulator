@@ -5,6 +5,7 @@ export default defineConfig({
     name: "camulator",
     entrypoint: "./worker/index.ts",
     compatibilityDate: "2026-10-31",
+    placement: { mode: "smart" },
     env: {
       DB: bindings.d1({
         name: "camulator",

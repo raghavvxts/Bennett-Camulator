@@ -19,22 +19,39 @@ export interface State {
   page?: number;
 }
 export class Store {
+  // Store instances live for one request; never share decrypted accounts globally.
+  private accounts = new Map<number, Promise<Profile | null>>();
+  private snapshots = new Map<number, string>();
   constructor(readonly env: Env) {}
   async account(id: number): Promise<Profile | null> {
+    const cached = this.accounts.get(id);
+    if (cached) return cached;
+    const pending = this.loadAccount(id);
+    this.accounts.set(id, pending);
+    return pending;
+  }
+  private async loadAccount(id: number): Promise<Profile | null> {
     const row = await this.env.DB.prepare(
       "SELECT sealed FROM accounts WHERE id=?",
     )
       .bind(id)
       .first<{ sealed: string }>();
-    return row
-      ? open<Profile>(row.sealed, this.env.CREDENTIAL_KEY, `account:${id}`)
-      : null;
+    if (!row) return null;
+    const profile = await open<Profile>(
+      row.sealed,
+      this.env.CREDENTIAL_KEY,
+      `account:${id}`,
+    );
+    this.snapshots.set(id, JSON.stringify(profile));
+    return profile;
   }
   async saveAccount(
     id: number,
     profile: Profile,
     relink = false,
   ): Promise<void> {
+    const serialized = JSON.stringify(profile);
+    if (!relink && this.snapshots.get(id) === serialized) return;
     const sealed = await seal(
       profile,
       this.env.CREDENTIAL_KEY,
@@ -45,12 +62,16 @@ export class Store {
     )
       .bind(id, sealed, new Date().toISOString())
       .run();
+    this.snapshots.set(id, serialized);
+    this.accounts.set(id, Promise.resolve(profile));
   }
   async forget(id: number): Promise<void> {
     await this.env.DB.batch([
       this.env.DB.prepare("DELETE FROM accounts WHERE id=?").bind(id),
       this.env.DB.prepare("DELETE FROM conversations WHERE id=?").bind(id),
     ]);
+    this.accounts.delete(id);
+    this.snapshots.delete(id);
   }
   async state(id: number): Promise<State | null> {
     const row = await this.env.DB.prepare(
@@ -95,12 +116,14 @@ export class Store {
       .run();
   }
   async uncertain(account: string, value?: boolean): Promise<boolean> {
-    if (value !== undefined)
+    if (value !== undefined) {
       await this.env.DB.prepare(
         "INSERT INTO operations(account,uncertain) VALUES(?,?) ON CONFLICT(account) DO UPDATE SET uncertain=excluded.uncertain",
       )
         .bind(account, value ? 1 : 0)
         .run();
+      return value;
+    }
     return Boolean(
       (
         await this.env.DB.prepare(
