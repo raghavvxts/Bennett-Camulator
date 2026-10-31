@@ -416,6 +416,8 @@ async def receive_email_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
         f"✅ Email saved: `{email}`\n\n"
         "🔑 *Step 2 of 2: Password*\n\n"
         "Now send your Password.\n\n"
+        "Your password and portal session are stored encrypted on this server for future requests. "
+        "Use Logout / Switch Account to remove the saved account.\n\n"
         "🔒 _(Your message will be deleted immediately from this chat for security)_"
     )
     await update.message.reply_text(msg, parse_mode="Markdown")
@@ -626,6 +628,16 @@ async def private_chat_only(update, context):
         raise ApplicationHandlerStop
 
 
+async def handle_error(update, context):
+    # Updates may contain passwords; never log the update or raw exception text.
+    logger.error("Bot request failed (%s)", type(context.error).__name__)
+    if update and update.effective_chat and update.effective_chat.type == "private" and update.effective_message:
+        try:
+            await update.effective_message.reply_text("Could not finish this request. Check MyCamu before retrying a pass request.")
+        except TelegramError:
+            logger.warning("Could not send the error notification")
+
+
 def main():
     if not BOT_TOKEN:
         print("❌ Error: TELEGRAM_BOT_TOKEN not set in .env")
@@ -634,6 +646,7 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).concurrent_updates(ChatUpdateProcessor()).post_init(post_init).post_shutdown(post_shutdown).build()
 
     app.add_handler(TypeHandler(Update, private_chat_only), group=-1)
+    app.add_error_handler(handle_error)
 
     app.add_handler(ConversationHandler(
         entry_points=[

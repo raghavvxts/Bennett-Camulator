@@ -55,9 +55,9 @@ Telegram commands: `/start`, `/login`, `/pass`, `/cancel`, `/menu`, `/attendance
 
 ## Storage, migration and backups
 
-SQLite encrypts stored parent passwords and session cookies with Fernet. Existing plaintext credentials are migrated transactionally at startup; database compaction removes old plaintext from its live pages/WAL. A wrong or missing key for existing encrypted accounts causes startup to fail rather than reset their data. Account email and basic student metadata remain unencrypted.
+SQLite encrypts stored login emails, parent passwords and session cookies with Fernet. Existing plaintext credentials are migrated transactionally at startup; database compaction removes old plaintext from its live pages/WAL. A wrong or missing key for existing encrypted accounts causes startup to fail rather than reset their data. Basic student metadata and Telegram IDs remain unencrypted; database files and backups have owner-only permissions. There is no Telegram command or HTTP endpoint that exports stored credentials. Runtime and privileged hosting administrators with the encryption key can still decrypt credentials; filesystem owner permissions do not prevent privileged access.
 
-**Preserve the original credential key.** Encrypted backups cannot be restored without it. Keep a separate secure copy of the key or supply `CREDENTIAL_KEY` through hosting secrets. Local file-key encryption does not protect against someone who can read both the database and its key.
+**Preserve the original credential key.** Encrypted backups cannot be restored without it. Keep a separate secure copy of the key or supply `CREDENTIAL_KEY` through hosting secrets. Local file-key encryption does not protect against someone who can read both the database and its key. Bot error logging omits incoming updates and raw exception messages to reduce accidental credential disclosure.
 
 The supervisor creates an online SQLite backup at startup and then once per day, retaining the seven latest daily snapshots under `backups/` in the data directory. These are local recovery snapshots, not off-site backups; copy snapshots and the recovery key to separate protected storage for protection against disk loss. Logout deletes the live linked account and its draft; retained backups expire with the seven-snapshot rotation.
 
@@ -84,6 +84,10 @@ An empty JSON body uses the same default reason. To specify a departure, supply 
 Only today or tomorrow is accepted. After closing, a request without a departure returns `needs_next_day: true`; the shortcut must ask before sending tomorrow's selected time. `force` cannot bypass gate/overlap checks. Portal refusals and uncertain submissions return `success: false`; callers must inspect that field, not only HTTP status.
 
 Other protected endpoints: `/active-pass`, `/attendance`, `/leaves`. All protected endpoints select the parent account from the supplied personal key. Clients cannot select another account by passing a Telegram/student ID in the request body. The optional owner key selects only the environment-configured account.
+
+## Project privacy
+
+The source and bot text do not hardcode the operator’s personal name or account credentials. This is not anonymity: public GitHub ownership and commit authorship, hosting records, Telegram configuration, and MyCamu’s account/request logs can identify or associate activity. Source cleanup does not erase public history or third-party records.
 
 ## Verification
 

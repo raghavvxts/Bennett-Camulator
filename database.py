@@ -28,6 +28,7 @@ def cipher():
         else:
             with os.fdopen(fd, 'wb') as stream:
                 stream.write(Fernet.generate_key())
+    os.chmod(path, 0o600)
     return Fernet(path.read_bytes().strip())
 
 
@@ -52,7 +53,10 @@ def connect():
 
 
 def init_db():
-    Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+    Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd = os.open(DB_PATH, os.O_CREAT | os.O_RDWR, 0o600)
+    os.close(fd)
+    os.chmod(DB_PATH, 0o600)
     migrated = False
     with connect() as conn:
         conn.execute('PRAGMA journal_mode=WAL')
@@ -69,23 +73,25 @@ def init_db():
         conn.execute('''CREATE TABLE IF NOT EXISTS heartbeat (name TEXT PRIMARY KEY, updated REAL NOT NULL)''')
         conn.execute('''CREATE TABLE IF NOT EXISTS shortcut_tokens (
             token_hash TEXT PRIMARY KEY, telegram_id INTEGER UNIQUE NOT NULL)''')
-        rows = conn.execute('SELECT telegram_id,password,cookies FROM users').fetchall()
-        if any(password.startswith('enc:v1:') for _, password, _ in rows):
+        rows = conn.execute('SELECT telegram_id,email,password,cookies FROM users').fetchall()
+        if any(any(value and value.startswith('enc:v1:') for value in (email,password,cookies)) for _,email,password,cookies in rows):
             if not os.getenv('CREDENTIAL_KEY') and not (Path(DB_PATH).parent / '.credential.key').exists():
                 raise ValueError('Credential key missing. Restore the original key; encrypted accounts cannot be reset automatically.')
         cipher()
-        for user_id, password, cookies in rows:
+        for user_id, email, password, cookies in rows:
             # Validate the configured key before committing any migration.
             cookies = cookies or '{}'
-            if password.startswith('enc:v1:') and cookies.startswith('enc:v1:'):
+            if email.startswith('enc:v1:') and password.startswith('enc:v1:') and cookies.startswith('enc:v1:'):
+                decrypt(email)
                 decrypt(password)
                 decrypt(cookies)
                 continue
+            email = decrypt(email) if email.startswith('enc:v1:') else email
             password = decrypt(password) if password.startswith('enc:v1:') else password
             cookies = decrypt(cookies) if cookies.startswith('enc:v1:') else cookies
             migrated = True
-            conn.execute('UPDATE users SET password=?,cookies=? WHERE telegram_id=?',
-                         (encrypt(password), encrypt(cookies), user_id))
+            conn.execute('UPDATE users SET email=?,password=?,cookies=? WHERE telegram_id=?',
+                         (encrypt(email), encrypt(password), encrypt(cookies), user_id))
     if migrated:
         with connect() as conn:
             conn.execute('VACUUM')
@@ -97,7 +103,7 @@ def save_user(telegram_id, email, password, student_name, stu_id, in_id, cookies
     with connect() as conn:
         conn.execute('''INSERT OR REPLACE INTO users
             (telegram_id,email,password,student_name,stu_id,in_id,cookies) VALUES (?,?,?,?,?,?,?)''',
-            (telegram_id,email,encrypt(password),student_name,stu_id,in_id,encrypt(json.dumps(cookies))))
+            (telegram_id,encrypt(email),encrypt(password),student_name,stu_id,in_id,encrypt(json.dumps(cookies))))
         conn.execute('DELETE FROM pass_drafts WHERE telegram_id=?', (telegram_id,))
         conn.execute('DELETE FROM shortcut_tokens WHERE telegram_id=?', (telegram_id,))
 
@@ -109,6 +115,7 @@ def get_user(telegram_id):
     if row is None:
         return None
     user = dict(row)
+    user['email'] = decrypt(user['email'])
     user['password'] = decrypt(user['password'])
     user['cookies'] = json.loads(decrypt(user['cookies']))
     return user
@@ -198,10 +205,14 @@ def heartbeat_age(name):
 
 def backup_database():
     folder = Path(DB_PATH).parent / 'backups'
-    folder.mkdir(exist_ok=True)
+    folder.mkdir(exist_ok=True, mode=0o700)
+    os.chmod(folder, 0o700)
     target = folder / time.strftime('users-%Y-%m-%d.sqlite', time.gmtime())
     if not target.exists():
         temporary = target.with_suffix('.tmp')
+        fd = os.open(temporary, os.O_CREAT | os.O_RDWR, 0o600)
+        os.close(fd)
+        os.chmod(temporary, 0o600)
         with connect() as source, closing(sqlite3.connect(str(temporary))) as destination:
             source.backup(destination)
         os.chmod(temporary, 0o600)
