@@ -1,33 +1,31 @@
 #!/usr/bin/env python3
+"""Read-only profile/history diagnostic; never creates or approves a pass."""
 import os
+from dotenv import load_dotenv
 from mycamu_api import MyCamuClient
 
+
 def main():
-    print("=" * 60)
-    print("   Bennett MyCamu - Instant Outpass Verification")
-    print("=" * 60)
+    load_dotenv()
+    email, password = os.getenv("PARENT_EMAIL"), os.getenv("PARENT_PASSWORD")
+    if not email or not password:
+        print("Set PARENT_EMAIL and PARENT_PASSWORD before running this diagnostic.")
+        return
+    ok, error, profile = MyCamuClient.test_and_fetch_profile(email, password)
+    if not ok:
+        print(f"Login failed: {error}")
+        return
+    client = MyCamuClient(email=email, password=password, cookies=profile["cookies"],
+                         stu_id=profile["stu_id"], in_id=profile["in_id"], student_name=profile["student_name"])
+    print(f"Login successful. Account type: {profile['account_type']}")
+    try:
+        records = client.get_leaves()
+        print(f"Retrieved {len(records)} leave/gate-pass records.")
+        for record in records[:5]:
+            print(f"{client.record_type(record)}: {client.record_status(record)}")
+    except Exception:
+        print("Could not retrieve records. Check MyCamu before retrying.")
 
-    client = MyCamuClient()
-    print(f"Parent Account: {client.email}")
-    print("Connecting to Bennett portal (student.bennetterp.camu.in)...")
-
-    if client.login():
-        print("\n✅ LOGIN SUCCESSFUL!")
-        student = client.student_profile or {}
-        print(f"👤 Student Name : {student.get('FNa', '')} {student.get('LNa', '')}")
-        print(f"🆔 Student ID   : {student.get('StuID', 'N/A')}")
-        print(f"🏫 Institute ID : {client.in_id}")
-
-        leaves = client.get_leaves()
-        print(f"\n📋 Retrieved {len(leaves)} past leaves / outpasses.")
-        if leaves:
-            latest = leaves[0]
-            print(f"   • Latest Record: {latest.get('LvTy')} ({latest.get('Rson')}) - Status: {latest.get('Stus')}")
-
-        print("\n🎉 Session cached into 'session.json'!")
-        print("Your credentials are saved. You won't have to enter them again.")
-    else:
-        print("\n❌ Login failed. If rate-limited, wait a couple minutes and try again.")
 
 if __name__ == "__main__":
     main()

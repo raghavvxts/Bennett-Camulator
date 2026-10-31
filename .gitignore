@@ -5,3 +5,10 @@ __pycache__/
 session.json
 users.db
 .DS_Store
+.credential.key
+backups/
+data/
+users.db-wal
+users.db-shm
+.env.*
+!.env.example
