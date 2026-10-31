@@ -1,6 +1,50 @@
 # Bennett Camulator
 
-A multi-user Telegram bot and FastAPI service for Bennett University's MyCamu parent portal.
+A multi-user Telegram bot for Bennett University's MyCamu parent portal. The current deployment uses **Cloudflare Workers + D1** with Telegram webhooks; the Python/FastAPI implementation below is retained for local use.
+
+## Cloudflare deployment (current)
+
+Workers serves Telegram webhooks and the personal shortcut API. D1 stores account records, expiring conversations, update deduplication, and atomic per-account pass locks. Credentials, portal cookies, and conversations use AES-256-GCM with account-specific authenticated context. The key is a Cloudflare secret; it must be retained across deployments. Logout revokes the personal shortcut key and removes the linked account and conversation.
+
+There is no always-on Python process or Render dependency. Workers and D1 use their free plans, with finite request, CPU and database quotas. University availability, limits and approval policies still apply; 100 simulated accounts do not prove live capacity or guarantee success.
+
+With Node 24+ and `cf` authentication:
+
+```sh
+npm ci
+npm run typecheck
+npm test
+cf deploy --dry-run
+npm run test:runtime
+cf deploy --prebuilt --mode production
+```
+
+`cloudflare.config.ts` binds the existing D1 database. For a fresh account, create a D1 database with `cf d1 create`, update the binding ID, and apply `worker/schema.sql` through `cf d1 query`. Deploy first-time secrets using `cf deploy --secrets-file /private/path/secrets.json`. Ordinary deployments preserve existing secrets. Do not commit that file.
+
+Required Worker secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `CREDENTIAL_KEY` (base64-encoded random 32 bytes), `OWNER_TELEGRAM_ID`, `OWNER_TELEGRAM_USERNAME`, `OWNER_PASSWORD_HASH`, and `OWNER_COMMAND`. Owner identity values are supplied only through secrets. Set an empty password hash to disable directory access. The Worker owner verifier uses WebCrypto PBKDF2-SHA256 at the platform maximum of 100,000 iterations, with a random salt and the separate encryption secret as a pepper; Python scrypt hashes are not interchangeable. `worker/security.ts` provides `ownerVerifier()` for provisioning. Never replace an existing encryption key without migrating encrypted records.
+
+After deployment, connect Telegram once:
+
+```sh
+node scripts/connect-telegram.mjs https://WORKER_URL /private/path/secrets.json
+```
+
+This validates service health, registers only public commands, and sets a secret-authenticated webhook without dropping queued updates. Do not run Python polling while the webhook is active. In Telegram, `/start` links an account. `/daypass` starts the pass flow. `/myid` returns the caller's own ID. Owner access uses the separately configured hidden command, exact numeric ID, matching username, and a password on every directory page. Five wrong passwords lock access for 15 minutes. Password messages must be deleted before verification or sign-in.
+
+Cloudflare stores new links in D1. Existing credentials in an inaccessible Render filesystem cannot be recovered automatically; users must link again. Legacy Fernet-encrypted SQLite records are not silently imported into the new AES format. No real parent credentials or identity values belong in source, tests, logs, or deployment configuration.
+
+All personal API routes require the `X-API-Key` issued by `/shortcut`: `POST /quick-pass` with optional `reason` and timezone-aware `departure_at`, and `GET` or `POST` for `/active-pass`, `/attendance`, `/leaves`, `/menu`. Query-string keys and mutating GET requests are rejected. The Worker does not enable the legacy shared environment-account shortcut; every key maps to its linked Telegram account.
+
+The GitHub Actions workflow verifies Python tests, Worker tests, types, a build and actual workerd runtime smoke tests before deploying pushes to `main`. Its Cloudflare token is account-scoped with Workers Scripts Write, Account Settings Read and D1 Read; it cannot create databases. Repository secrets hold the token and account ID. The current deployment token expires in November 2027 and must be renewed before then. No Telegram token, encryption key or owner password is needed in GitHub Actions; deployed secrets are preserved.
+
+An uncertain submission is recorded in D1 `operations` before any portal mutation. A retry may reconcile an existing submitted/approved pass; absent a matching pass, an operator must check MyCamu before clearing `uncertain` for the correct hashed account. Never clear it merely because a request timed out. Chat leases serialize each conversation; account leases also cover personal API calls and the same parent account linked by different Telegram users. Telegram retries are deduplicated after processing. Expiring drafts are never submitted automatically.
+
+Health checks validate D1 and secret configuration, not university availability. The runtime smoke test mocks network responses and checks real workerd fetch behavior, AES storage, PBKDF2 verification and webhook deduplication. The optional `scripts/live-read-check.mjs` accepts credentials/configuration through stdin, checks live **read-only** API routes using a temporary encrypted account, and deletes that account afterward. It never creates or approves passes.
+
+The production compatibility date is current at migration. The beta local runtime trails it by one day, so the runtime smoke uses that supported date on the identical compiled bundle. The CLI/Vite toolchain is pinned through `package-lock.json`; runtime code has no third-party package dependencies.
+
+## Python implementation (local / legacy)
+
 
 ## Day Out Pass
 

@@ -1,0 +1,31 @@
+{
+  "name": "camulator-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "tsx --test worker/*.test.ts",
+    "typecheck": "cf workers types && tsc --noEmit",
+    "build": "cf build",
+    "deploy": "cf deploy",
+    "test:runtime": "node scripts/runtime-smoke.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^2.0.0-beta.v.8",
+    "@cloudflare/workers-types": "latest",
+    "@types/node": "^26.0.0",
+    "cf": "0.15.0",
+    "miniflare": "^5.20261023.3-beta",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.5"
+  },
+  "allowScripts": {
+    "workerd": true,
+    "esbuild": true
+  },
+  "overrides": {
+    "zod": "^4.6.7",
+    "sharp": "^0.35.5",
+    "undici": "^7.30.1"
+  }
+}

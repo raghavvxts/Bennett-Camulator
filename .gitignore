@@ -13,3 +13,7 @@ users.db-shm
 .env.*
 !.env.example
 .owner-password.hash
+node_modules/
+.cloudflare/
+.dev.vars
+cf-env.d.ts
