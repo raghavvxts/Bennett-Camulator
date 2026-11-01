@@ -113,6 +113,17 @@ class PortalTests(PortalFixture):
         self.records.append({**GATE, "_id": "old", "status": "CMPT", "isCOut": True, "isCIn": True})
         self.assertTrue(self.create()["success"])
 
+    def test_cancelled_or_expired_gate_allows_replacement_and_is_not_active(self):
+        for status in ("CNCL", "Cancelled", "EXP", "Expired"):
+            with self.subTest(status=status):
+                self.records = [LEAVE, {**GATE, "_id": "old", "status": status}]
+                self.created = self.approved = False
+                with patch("mycamu_api.datetime", wraps=datetime) as clock:
+                    clock.now.return_value = NOW
+                    self.assertFalse(self.client.get_active_pass()["has_active_pass"])
+                    self.assertTrue(self.create()["success"])
+                self.assertTrue(self.created)
+
     def test_checked_in_but_not_completed_does_not_create_another_pass(self):
         self.records.append({**GATE, "status": "APPRVD", "isCOut": True, "isCIn": True})
         self.approved = True
@@ -121,7 +132,7 @@ class PortalTests(PortalFixture):
         self.assertFalse(self.created)
 
     def test_other_noncompleted_statuses_never_allow_new_creation(self):
-        for status in ["In Progress", "EXP", "CNCL", "REJ", "UNRECOGNIZED"]:
+        for status in ["In Progress", "REJ", "UNRECOGNIZED"]:
             with self.subTest(status=status):
                 self.records = [LEAVE, {**GATE, "status": status, "isCIn": True}]
                 result = self.create()

@@ -76,7 +76,8 @@ export function blocking(
     (r) =>
       r.isGatepass &&
       ((r.isCOut && !r.isCIn) ||
-        (status(r) !== "Completed" && (covers(r, day) || covers(r, today)))),
+        (!["Completed", "Cancelled", "Expired"].includes(status(r)) &&
+          (covers(r, day) || covers(r, today)))),
   );
 }
 export async function boundedJson(
@@ -339,7 +340,7 @@ export class Camu {
           !["Submitted", "Approved"].includes(status(existing))
         )
           throw new UserError(
-            "An existing gate pass is not Completed. No new pass created, regardless of whether you are inside or outside campus.",
+            "An existing gate pass is not Completed, Cancelled or Expired. No new pass created, regardless of whether you are inside or outside campus.",
           );
         await store.uncertain(account, true);
         const result = await this.approve(existing);

@@ -177,7 +177,7 @@ class MyCamuClient:
                 status = self.record_status(record)
                 outside = bool(record.get("isCOut") and not record.get("isCIn"))
                 start, end = record.get("frdt", ""), record.get("todt", "")
-                if outside or (status != "Completed" and start[:10] <= today <= end[:10]):
+                if outside or (status not in ("Completed", "Cancelled", "Expired") and start[:10] <= today <= end[:10]):
                     return {"success": True, "has_active_pass": True, "is_outside_campus": outside,
                             "pass": record, "reason": record.get("rson"), "type": self.record_type(record),
                             "status": status, "start": start, "end": end}
@@ -342,18 +342,18 @@ class MyCamuClient:
                     raise ValueError("Requested times are outside MyCamu's current pass window.")
             today = datetime.now(IST).date().isoformat()
             active = [r for r in records if r.get("isGatepass") and
-                      self.record_status(r) != "Completed" and
+                      self.record_status(r) not in ("Completed", "Cancelled", "Expired") and
                       any(r.get("frdt", "")[:10] <= date <= r.get("todt", "")[:10]
                           for date in (day, today))]
             if active:
                 if len(active) != 1 or active[0].get("passTyCode") != pass_type["passCd"]:
-                    raise ValueError("An existing gate pass is not Completed. No new pass was created. Check its status in MyCamu.")
+                    raise ValueError("An existing gate pass is not Completed, Cancelled or Expired. No new pass was created. Check its status in MyCamu.")
                 existing = active[0]
                 if not (existing.get("frdt", "")[:10] <= day <= existing.get("todt", "")[:10]) or self.record_status(existing) not in ("Submitted", "Approved"):
                     return {"success": False, "status": self.record_status(existing),
                             "pass_id": existing.get("_id"), "departure": existing.get("frdt"),
                             "return": existing.get("todt"),
-                            "message": f"Your existing gate pass is {self.record_status(existing)}. No new pass was created. Another pass can be created only after its status is Completed, regardless of whether you are inside or outside campus."}
+                            "message": f"Your existing gate pass is {self.record_status(existing)}. No new pass was created. Another pass can be created only after its status is Completed, Cancelled or Expired, regardless of whether you are inside or outside campus."}
                 notify("3/3 Reusing your gate pass and checking approval…")
                 database.uncertain_operation(self._operation_account, True)
                 result = self._approve_gate_pass(active[0])

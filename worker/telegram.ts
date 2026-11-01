@@ -579,7 +579,7 @@ export class Telegram {
       await this.send(
         id,
         result.has_active_pass
-          ? `Gate pass: ${result.status}\n${result.start} to ${result.end}\n${result.is_outside_campus ? "Checked OUT" : "Inside / no current OUT scan"}\nNew passes are blocked until Completed.`
+          ? `Gate pass: ${result.status}\n${result.start} to ${result.end}\n${result.is_outside_campus ? "Checked OUT" : "Inside / no current OUT scan"}\nNew passes are blocked until Completed, Cancelled or Expired; unresolved OUT scans still block creation.`
           : "No current unfinished gate pass found.",
         main,
       );

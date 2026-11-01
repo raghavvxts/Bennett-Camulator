@@ -4,6 +4,8 @@ A multi-user Telegram bot for Bennett University's MyCamu parent portal. The cur
 
 ## Cloudflare deployment (current)
 
+Completed, Cancelled and Expired gate passes permit a new pass. Submitted/Approved passes are reused, while unresolved OUT scans and other blocking statuses still prevent new submissions.
+
 The deployed Telegram bot always uses **Going out** as the reason; there is no reason-editing feature. Before 6 AM and when selecting tomorrow after closing, hour/minute buttons and ±1-minute controls select an exact departure without typing. Return remains 7 PM IST on the selected day.
 
 Workers serves Telegram webhooks and the personal shortcut API. D1 stores account records, expiring conversations, update deduplication, and atomic per-account pass locks. Credentials, portal cookies, and conversations use AES-256-GCM with account-specific authenticated context. The key is a Cloudflare secret; it must be retained across deployments. Logout revokes the personal shortcut key and removes the linked account and conversation.
@@ -56,7 +58,7 @@ The production compatibility date is current at migration. The beta local runtim
 - The default outing reason is **Going out**. Users can change it before selecting **Create pass**.
 - The bot checks the linked student's leave and gate records first. A valid leave covering the selected date is reused; otherwise it submits `Leave`, a reason, and the same date in both leave-date fields.
 - It creates a real gate pass using the portal's Day Out Pass configuration (`DOP`), requests parent approval separately, and checks that pass's final status before reporting success.
-- A new pass is allowed only after the current gate pass is marked `Completed`, even if the student is already inside campus. Existing submitted/approved day passes are reused (and pending parent approval can be completed) without creating another pass. Other non-completed statuses block creation; a current unfinished pass also blocks scheduling another pass for tomorrow. A contradictory scanned-out record still blocks creation until resolved.
+- A new pass is allowed after the current gate pass is marked `Completed`, `Cancelled` or `Expired`, even if the student is already inside campus. Existing submitted/approved day passes are reused (and pending parent approval can be completed) without creating another pass. Other statuses block creation; a current unfinished pass also blocks scheduling another pass for tomorrow. A contradictory scanned-out record still blocks creation until resolved.
 - Departure defaults to the next full minute **after** the portal checks. Return is 7 PM the same day. User-selected departures are revalidated before submission.
 - Before 6 AM, the bot asks for a departure time. At closing it asks whether to apply for tomorrow, then asks for a time from 6 AM to before 7 PM. It never silently changes the selected day.
 - No documents are requested for Day Out Pass. Multi-day Leave Out Pass is outside this implementation.

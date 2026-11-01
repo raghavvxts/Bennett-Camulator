@@ -270,16 +270,33 @@ test("100 accounts maintain separate encrypted credentials and API keys", async 
     assert.equal((await store.account(i))!.email, `parent${i}@example.invalid`);
   }
 });
-test("non-Completed gate statuses block, including rejected/cancelled/unknown; Completed permits next pass", () => {
-  for (const s of ["SUB", "APPRVD", "CNCL", "REJ", "EXP", "NEW"])
+test("active, rejected and unknown statuses block; terminal passes permit another pass", () => {
+  for (const s of ["SUB", "APPRVD", "REJ", "NEW"])
     assert.equal(
       blocking([gate({ status: s })], "2026-11-01", "2026-11-01").length,
       1,
     );
-  assert.equal(
-    blocking([gate({ status: "CMPT" })], "2026-11-01", "2026-11-01").length,
-    0,
-  );
+  for (const ended of [
+    "CMPT",
+    "CNCL",
+    "EXP",
+    "Completed",
+    "Cancelled",
+    "Expired",
+  ]) {
+    assert.equal(
+      blocking([gate({ status: ended })], "2026-11-01", "2026-11-01").length,
+      0,
+    );
+    assert.equal(
+      blocking(
+        [gate({ status: ended, isCOut: true })],
+        "2026-11-01",
+        "2026-11-01",
+      ).length,
+      1,
+    );
+  }
   assert.equal(
     blocking(
       [gate({ status: "CMPT", isCOut: true })],
@@ -802,4 +819,46 @@ test("uncertainty markers are durably written without a redundant read-back", as
   assert.equal(await new Store(env).uncertain("test-account"), true);
   assert.equal(await store.uncertain("test-account", false), false);
   assert.equal(await new Store(env).uncertain("test-account"), false);
+});
+
+for (const ended of ["CNCL", "EXP", "Cancelled", "Expired"])
+  test(`new approved pass replaces a ${ended} pass`, async (t) => {
+    t.mock.method(Date, "now", () => fixed);
+    const { store } = fixture(),
+      p = portal([gate({ status: ended })]),
+      client = new Camu(profile(), p.network);
+    assert.equal((await client.active()).has_active_pass, false);
+    const result = await client.createPass(store);
+    assert.equal(result.success, true);
+    assert.equal(result.status, "Approved");
+    assert.equal(p.creates, 1);
+    assert.equal(p.approvals, 1);
+  });
+test("yesterday's unused expired pass permits today's pass", async (t) => {
+  t.mock.method(Date, "now", () => fixed);
+  const { store } = fixture(),
+    p = portal([
+      gate({
+        status: "EXP",
+        frdt: "2026-10-31T10:00:00Z",
+        todt: "2026-10-31T19:00:00Z",
+      }),
+    ]);
+  assert.equal(
+    (await new Camu(profile(), p.network).createPass(store)).success,
+    true,
+  );
+  assert.equal(p.creates, 1);
+});
+test("a cancelled historical pass does not hide a separate active pass", async (t) => {
+  t.mock.method(Date, "now", () => fixed);
+  const { store } = fixture(),
+    p = portal([
+      gate({ _id: "cancelled", status: "CNCL" }),
+      gate({ _id: "active", status: "APPRVD" }),
+    ]);
+  const result = await new Camu(profile(), p.network).createPass(store);
+  assert.equal(result.reused_gate_pass, true);
+  assert.equal(result.pass_id, "active");
+  assert.equal(p.creates, 0);
 });
